@@ -1,0 +1,37 @@
+<navigation-bar title="" back="{{false}}" color="#FFFFFF" background="transparent"></navigation-bar>
+
+<view class="welcome-page">
+  <view class="memory-collage">
+    <view wx:for="{{photos}}" wx:key="id" wx:for-index="index" class="photo-tile tile-{{index % 21}}">
+      <image
+        wx:if="{{!photoFallbacks[index]}}"
+        class="memory-photo"
+        src="{{item.src}}"
+        mode="aspectFill"
+        binderror="onPhotoError"
+        data-index="{{index}}"
+      />
+      <view wx:else class="photo-fallback">
+        <view class="fallback-mark">{{index + 1}}</view>
+        <view class="fallback-text">{{item.title}}</view>
+      </view>
+    </view>
+  </view>
+
+  <view class="screen-shade"></view>
+
+  <view class="hero-copy">
+    <view class="eyebrow">TODAY</view>
+    <view class="hero-title">今天怎么过</view>
+    <view class="hero-subtitle">可以认真安排，也可以随性一点。</view>
+  </view>
+
+  <view wx:if="{{hasPartnerShare}}" class="welcome-actions">
+    <button class="action-btn primary-btn" bind:tap="viewPartnerChoice">看看 TA 选了什么</button>
+  </view>
+
+  <view wx:else class="welcome-actions">
+    <button class="action-btn quiet-btn" bind:tap="goFreeWrite">今天不安排，随性过</button>
+    <button class="action-btn primary-btn" bind:tap="goPickPlan">来看看今天干啥</button>
+  </view>
+</view>

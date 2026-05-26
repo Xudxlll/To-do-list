@@ -1,0 +1,31 @@
+<navigation-bar title="随性过" color="black" background="#FFF5F5"></navigation-bar>
+
+<view class="free-page">
+  <view class="free-header">
+    <view class="free-kicker">FREE DAY</view>
+    <view class="free-title">今天不安排也可以</view>
+    <view class="free-subtitle">写下一句想做的事，或者只写下今天的心情。</view>
+  </view>
+
+  <view class="text-panel">
+    <textarea
+      class="free-textarea"
+      value="{{inputValue}}"
+      maxlength="{{maxLength}}"
+      placeholder="比如：今天就想慢慢散步，看到什么吃什么。"
+      auto-height="{{false}}"
+      bindinput="onTextInput"
+    />
+    <view class="counter">{{textLength}}/{{maxLength}}</view>
+  </view>
+
+  <view class="send-area">
+    <button
+      class="send-free-btn {{!canShare ? 'btn-disabled' : ''}}"
+      disabled="{{!canShare}}"
+      open-type="share"
+    >
+      发送给 TA
+    </button>
+  </view>
+</view>

@@ -1,5 +1,7 @@
 {
   "pages": [
+    "pages/welcome/welcome",
+    "pages/free-write/free-write",
     "pages/index/index",
     "pages/result/result"
   ],

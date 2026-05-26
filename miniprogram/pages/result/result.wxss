@@ -84,6 +84,31 @@
   border-color: #F5D5A0;
 }
 
+.free-result-card {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.96), rgba(255, 248, 241, 0.96));
+  border-radius: var(--radius);
+  padding: 34rpx 32rpx;
+  margin-bottom: 20rpx;
+  border: 2rpx solid rgba(255, 179, 191, 0.48);
+  box-shadow: var(--shadow);
+}
+
+.free-card-label {
+  font-size: 24rpx;
+  color: var(--accent);
+  font-weight: 700;
+  margin-bottom: 18rpx;
+}
+
+.free-card-text {
+  font-size: 34rpx;
+  line-height: 1.7;
+  color: var(--text-primary);
+  font-weight: 600;
+  word-break: break-word;
+}
+
 .result-bar {
   display: flex;
   gap: 20rpx;

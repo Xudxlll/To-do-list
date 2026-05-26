@@ -21,7 +21,11 @@ const app = getApp<{
 Component({
   data: {
     isLocked: false,
+    isFreeText: false,
     fromUser: '',
+    freeText: '',
+    navTitle: '收到选择',
+    summaryTitle: '',
     partnerSelections: [] as PartnerCategoryItem[],
     lockedShareData: null as ShareData | null,
   },
@@ -45,13 +49,17 @@ Component({
     showLocked() {
       const locked = wx.getStorageSync('lockedState');
       if (!locked || !locked.shareData) {
-        wx.reLaunch({ url: '/pages/index/index' });
+        wx.reLaunch({ url: '/pages/welcome/welcome' });
         return;
       }
       const sd = locked.shareData as ShareData;
       this.setData({
         isLocked: true,
+        isFreeText: sd.mode === 'freeText',
         fromUser: sd.fromUser,
+        freeText: sd.freeText || '',
+        navTitle: '今日已定 🔒',
+        summaryTitle: '今天的计划已确定！',
         partnerSelections: this.buildPartnerSelections(sd),
         lockedShareData: sd,
       });
@@ -61,12 +69,16 @@ Component({
       const g = app.globalData;
       const shareData = g.partnerShareData;
       if (!shareData) {
-        wx.reLaunch({ url: '/pages/index/index' });
+        wx.reLaunch({ url: '/pages/welcome/welcome' });
         return;
       }
       this.setData({
         isLocked: false,
+        isFreeText: shareData.mode === 'freeText',
         fromUser: shareData.fromUser,
+        freeText: shareData.freeText || '',
+        navTitle: shareData.mode === 'freeText' ? '收到安排' : '收到选择',
+        summaryTitle: shareData.mode === 'freeText' ? `${shareData.fromUser} 的今日随性安排` : '一二&布布的选择',
         partnerSelections: this.buildPartnerSelections(shareData),
         lockedShareData: shareData,
       });
@@ -86,7 +98,7 @@ Component({
 
     onEdit() {
       const g = app.globalData;
-      if (g.partnerShareData) {
+      if (g.partnerShareData && g.partnerShareData.mode !== 'freeText') {
         const sel: Record<string, Option[]> = {};
         g.partnerShareData.selections.forEach(s => {
           sel[s.categoryId] = s.options.map(o => ({ ...o }));
@@ -106,7 +118,11 @@ Component({
 
       wx.showToast({ title: '今日计划已定！🎉', icon: 'none', duration: 1500 });
       setTimeout(() => {
-        this.setData({ isLocked: true });
+        this.setData({
+          isLocked: true,
+          navTitle: '今日已定 🔒',
+          summaryTitle: '今天的计划已确定！',
+        });
       }, 1500);
     },
 
@@ -116,7 +132,7 @@ Component({
       g.selections = {};
       g.partnerShareData = null;
       wx.removeStorageSync('selections');
-      wx.reLaunch({ url: '/pages/index/index' });
+      wx.reLaunch({ url: '/pages/welcome/welcome' });
     },
   },
 });

@@ -1,4 +1,4 @@
-import { CATEGORIES, Option, encodeShareData, ShareData } from '../../data/categories';
+import { CATEGORIES, Option, OptionGroup, encodeShareData, ShareData } from '../../data/categories';
 
 const app = getApp<{
   globalData: {
@@ -17,6 +17,10 @@ Component({
     currentCategoryId: 'eat',
     currentCategory: CATEGORIES[0],
     currentOptions: CATEGORIES[0].options.map(o => ({ ...o })),
+    currentOptionGroups: CATEGORIES[0].optionGroups.map(group => ({
+      ...group,
+      options: group.options.map(o => ({ ...o })),
+    })) as OptionGroup[],
     currentCustomOptions: [] as Option[],
     selectedIds: {} as Record<string, boolean>,
     selectedCounts: {} as Record<string, number>,
@@ -74,6 +78,10 @@ Component({
         currentCategoryId: catId,
         currentCategory: cat,
         currentOptions: cat.options.map(o => ({ ...o })),
+        currentOptionGroups: cat.optionGroups.map(group => ({
+          ...group,
+          options: group.options.map(o => ({ ...o })),
+        })),
         inputValue: '',
       });
       this.refreshCurrentOptions();
@@ -82,13 +90,29 @@ Component({
     refreshCurrentOptions() {
       const catId = this.data.currentCategoryId;
       const currentOpts = app.globalData.selections[catId] || [];
-      const presetIds = this.data.currentOptions.map(o => o.id);
+      const presetById: Record<string, Option> = {};
+      const presetByName: Record<string, Option> = {};
+      this.data.currentOptions.forEach(o => {
+        presetById[o.id] = o;
+        presetByName[o.name] = o;
+      });
       const presetSelected: Record<string, boolean> = {};
       const customOpts: Option[] = [];
-      currentOpts.forEach(o => {
+      let shouldSave = false;
+      currentOpts.forEach((o, index) => {
         if (o.isCustom) customOpts.push(o);
-        else if (presetIds.includes(o.id)) presetSelected[o.id] = true;
+        else {
+          const preset = presetById[o.id] || presetByName[o.name];
+          if (preset) {
+            presetSelected[preset.id] = true;
+            if (preset.id !== o.id) {
+              currentOpts[index] = preset;
+              shouldSave = true;
+            }
+          }
+        }
       });
+      if (shouldSave) app.saveSelections();
       this.setData({ selectedIds: presetSelected, currentCustomOptions: customOpts });
     },
 
@@ -194,10 +218,10 @@ Component({
           return { categoryId: catId, categoryName: cat ? cat.name : '', options: opts };
         });
       if (selections.length === 0) return { title: '今天干什么？', path: '/pages/result/result' };
-      const shareData: ShareData = { fromUser: g.nickname || '我', selections, timestamp: Date.now() };
+      const shareData: ShareData = { fromUser: g.nickname || '我', selections, timestamp: Date.now(), mode: 'selection' };
       return {
         title: `${g.nickname || '我'} 发来了今日选择 💌`,
-        path: `/pages/result/result?data=${encodeShareData(shareData)}`,
+        path: `/pages/welcome/welcome?data=${encodeShareData(shareData)}`,
       };
     },
   },

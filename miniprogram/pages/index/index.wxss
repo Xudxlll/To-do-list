@@ -71,6 +71,20 @@
   color: var(--text-primary);
 }
 
+.option-group {
+  margin-bottom: 24rpx;
+}
+
+.group-title {
+  font-size: 26rpx;
+  font-weight: 700;
+  color: var(--accent);
+  margin: 0 8rpx 12rpx;
+  padding-left: 16rpx;
+  border-left: 6rpx solid var(--accent-light);
+  line-height: 1.35;
+}
+
 .option-item {
   display: flex;
   align-items: center;
@@ -111,10 +125,23 @@
   justify-content: center;
 }
 
+.option-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
 .option-name {
   font-size: 28rpx;
   color: var(--text-primary);
-  flex: 1;
+  line-height: 1.35;
+}
+
+.option-desc {
+  font-size: 22rpx;
+  line-height: 1.45;
+  color: var(--text-secondary);
 }
 
 .custom-section {

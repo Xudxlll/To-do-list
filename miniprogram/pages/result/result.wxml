@@ -1,25 +1,32 @@
-<navigation-bar title="{{isLocked ? '今日已定 🔒' : '收到选择'}}" back="{{false}}" color="black" background="#FFF5F5">
+<navigation-bar title="{{navTitle}}" back="{{false}}" color="black" background="#FFF5F5">
   <view slot="left" class="reset-btn" bind:tap="onReset">🔄 重置</view>
 </navigation-bar>
 
 <scroll-view class="scrollarea" scroll-y type="list" enhanced show-scrollbar="{{false}}">
   <view class="summary-header">
     <view class="summary-icon">{{isLocked ? '🎉' : '💌'}}</view>
-    <view class="summary-title">{{isLocked ? '今天的计划已确定！' : fromUser + ' 的选择'}}</view>
+    <view class="summary-title">{{summaryTitle}}</view>
     <view wx:if="{{isLocked}}" class="locked-badge">🔒 已锁定</view>
   </view>
 
-  <view wx:for="{{partnerSelections}}" wx:key="categoryId" class="partner-category">
-    <view class="pcat-header">
-      <text class="pcat-icon">{{item.icon}}</text>
-      <text class="pcat-name">{{item.categoryName}}</text>
-    </view>
-    <view class="pcat-options">
-      <view wx:for="{{item.options}}" wx:key="id" class="pcat-option {{item.isCustom ? 'is-custom' : ''}}">
-        {{item.name}}
+  <view wx:if="{{isFreeText}}" class="free-result-card">
+    <view class="free-card-label">今天随性过</view>
+    <view class="free-card-text">{{freeText}}</view>
+  </view>
+
+  <block wx:else>
+    <view wx:for="{{partnerSelections}}" wx:key="categoryId" class="partner-category">
+      <view class="pcat-header">
+        <text class="pcat-icon">{{item.icon}}</text>
+        <text class="pcat-name">{{item.categoryName}}</text>
+      </view>
+      <view class="pcat-options">
+        <view wx:for="{{item.options}}" wx:key="id" class="pcat-option {{item.isCustom ? 'is-custom' : ''}}">
+          {{item.name}}
+        </view>
       </view>
     </view>
-  </view>
+  </block>
 
   <view style="height: 180rpx;"></view>
 </scroll-view>

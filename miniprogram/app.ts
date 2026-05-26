@@ -43,10 +43,12 @@ App<IAppOption>({
         this.globalData.partnerShareData = shareData;
         this.globalData.selections = {};
         wx.removeStorageSync('selections');
-        wx.reLaunch({ url: '/pages/result/result' });
+        wx.reLaunch({ url: '/pages/welcome/welcome' });
         return;
       }
     }
+
+    if (this.globalData.partnerShareData) return;
 
     const locked = this.getLockedState();
     if (locked) {

@@ -51,7 +51,7 @@ page {
   padding: 18rpx 48rpx;
   font-size: 30rpx;
   font-weight: 600;
-  letter-spacing: 2rpx;
+  letter-spacing: 0;
 }
 
 .bottom-bar .btn-disabled {

@@ -1,0 +1,60 @@
+page {
+  --bg-primary: #FFF5F5;
+  --bg-card: #FFFFFF;
+  --text-primary: #4A4A4A;
+  --text-secondary: #9B9B9B;
+  --accent: #FF6B81;
+  --accent-light: #FFB3BF;
+  --accent-bg: #FFF0F3;
+  --border: #FFE0E5;
+  --shadow: 0 4rpx 20rpx rgba(255, 107, 129, 0.1);
+  --radius: 24rpx;
+  --radius-sm: 16rpx;
+
+  background-color: var(--bg-primary);
+  font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Helvetica Neue', sans-serif;
+  color: var(--text-primary);
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.bottom-bar {
+  background: var(--bg-card);
+  border-top: 2rpx solid var(--border);
+  padding: 20rpx 32rpx;
+  padding-bottom: calc(20rpx + env(safe-area-inset-bottom));
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+  box-shadow: 0 -4rpx 20rpx rgba(255, 107, 129, 0.08);
+}
+
+.bottom-bar .count {
+  font-size: 28rpx;
+  color: var(--text-secondary);
+}
+
+.bottom-bar .count em {
+  font-style: normal;
+  color: var(--accent);
+  font-weight: 600;
+  font-size: 36rpx;
+}
+
+.bottom-bar .send-btn {
+  background: linear-gradient(135deg, #FF6B81, #FF8E9E);
+  color: #fff;
+  border: none;
+  border-radius: 48rpx;
+  padding: 18rpx 48rpx;
+  font-size: 30rpx;
+  font-weight: 600;
+  letter-spacing: 2rpx;
+}
+
+.bottom-bar .btn-disabled {
+  background: #E0E0E0;
+  color: #B0B0B0;
+}

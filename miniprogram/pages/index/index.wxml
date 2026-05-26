@@ -1,0 +1,72 @@
+<navigation-bar title="今天干什么" back="{{false}}" color="black" background="#FFF5F5"></navigation-bar>
+
+<view class="main-layout">
+  <scroll-view class="left-sidebar" scroll-y type="list" enhanced show-scrollbar="{{false}}">
+    <view
+      wx:for="{{categories}}"
+      wx:key="id"
+      class="sidebar-item {{currentCategoryId === item.id ? 'active' : ''}}"
+      bind:tap="onSelectCategory"
+      data-id="{{item.id}}"
+    >
+      <view class="sidebar-icon">{{item.icon}}</view>
+      <view class="sidebar-name">{{item.shortName}}</view>
+      <view wx:if="{{selectedCounts[item.id] > 0}}" class="sidebar-badge">{{selectedCounts[item.id]}}</view>
+    </view>
+  </scroll-view>
+
+  <scroll-view class="right-content" scroll-y type="list" enhanced show-scrollbar="{{false}}">
+    <view class="content-header">
+      <text class="content-title">{{currentCategory.icon}} {{currentCategory.name}}</text>
+    </view>
+
+    <view
+      wx:for="{{currentOptions}}"
+      wx:key="id"
+      class="option-item {{selectedIds[item.id] ? 'selected' : ''}}"
+      bind:tap="onToggleOption"
+      data-option="{{item}}"
+    >
+      <view class="option-checkbox">
+        <view wx:if="{{selectedIds[item.id]}}" class="checkbox-checked">✓</view>
+      </view>
+      <text class="option-name">{{item.name}}</text>
+    </view>
+
+    <view wx:if="{{currentCustomOptions.length > 0}}" class="custom-section">
+      <view class="custom-label">自定义</view>
+      <view
+        wx:for="{{currentCustomOptions}}"
+        wx:key="id"
+        class="option-item custom-option {{selectedIds[item.id] ? 'selected' : ''}}"
+        bind:tap="onToggleOption"
+        data-option="{{item}}"
+      >
+        <view class="option-checkbox">
+          <view wx:if="{{selectedIds[item.id]}}" class="checkbox-checked">✓</view>
+        </view>
+        <text class="option-name">{{item.name}}</text>
+        <view class="del-btn" bind:tap="onDeleteCustom" data-id="{{item.id}}">✕</view>
+      </view>
+    </view>
+
+    <view class="custom-input-row">
+      <input
+        class="custom-input"
+        value="{{inputValue}}"
+        placeholder="✏️ 输入自定义选项..."
+        bind:input="onCustomInput"
+        bind:confirm="onAddCustom"
+        confirm-type="done"
+      />
+      <button class="add-btn {{!inputValue ? 'btn-disabled' : ''}}" disabled="{{!inputValue}}" bind:tap="onAddCustom">添加</button>
+    </view>
+
+    <view style="height: 20rpx;"></view>
+  </scroll-view>
+</view>
+
+<view class="bottom-bar">
+  <view class="count">已选 <em>{{totalCount}}</em> 项</view>
+  <button class="send-btn {{totalCount === 0 ? 'btn-disabled' : ''}}" disabled="{{totalCount === 0}}" open-type="share">发送给 TA 💌</button>
+</view>

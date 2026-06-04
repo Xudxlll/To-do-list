@@ -1,4 +1,5 @@
 import { Option, ShareData, decodeShareData } from './data/categories';
+import { initCloud } from './config/cloud';
 
 interface LockedState {
   locked: boolean;
@@ -23,6 +24,12 @@ App<IAppOption>({
   },
 
   onLaunch(options: WechatMiniprogram.App.LaunchShowOption) {
+    try {
+      initCloud();
+    } catch (e) {
+      console.warn('云开发初始化失败', e);
+    }
+
     const storedNickname = wx.getStorageSync('nickname');
     if (storedNickname) {
       this.globalData.nickname = storedNickname;

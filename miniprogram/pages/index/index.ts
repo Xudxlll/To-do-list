@@ -122,10 +122,10 @@ Component({
       const customOpts: Option[] = [];
       let shouldSave = false;
       currentOpts.forEach((o, index) => {
-        const preset = o.isCustom ? null : presetById[o.id] || presetByName[o.name];
+        const preset = presetById[o.id] || presetByName[o.name];
         if (preset) {
           presetSelected[preset.id] = true;
-          if (preset.id !== o.id) {
+          if (preset.id !== o.id || o.isCustom) {
             currentOpts[index] = preset;
             shouldSave = true;
           }
@@ -135,10 +135,6 @@ Component({
         const fallbackOption = o.isCustom ? o : { ...o, isCustom: true };
         customOpts.push(fallbackOption);
         presetSelected[fallbackOption.id] = true;
-        if (!o.isCustom) {
-          currentOpts[index] = fallbackOption;
-          shouldSave = true;
-        }
       });
       if (shouldSave) app.saveSelections();
       this.setData({ selectedIds: presetSelected, currentCustomOptions: customOpts });
@@ -162,6 +158,7 @@ Component({
       if (idx >= 0) {
         sel.splice(idx, 1);
         if (option.isCustom) {
+          selectedIds[option.id] = false;
           this.setData({ currentCustomOptions: this.data.currentCustomOptions.filter(o => o.id !== option.id) });
         } else {
           selectedIds[option.id] = false;

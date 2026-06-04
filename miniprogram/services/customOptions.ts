@@ -2,9 +2,18 @@ import { CLOUD_COLLECTIONS, getCloudDb } from '../config/cloud';
 import { CustomOptionRecord } from '../types/diary';
 import { normalizeOptionName } from '../utils/categoryOptions';
 
+function stableHash(input: string): string {
+  let hash = 5381;
+  for (let i = 0; i < input.length; i += 1) {
+    hash = ((hash << 5) + hash) + input.charCodeAt(i);
+    hash >>>= 0;
+  }
+  return hash.toString(36);
+}
+
 function sanitizeDocIdPart(value: string): string {
-  const encoded = encodeURIComponent(value).replace(/%/g, '_');
-  return encoded.replace(/[^A-Za-z0-9_-]/g, '_') || 'empty';
+  const readable = value.replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 24) || 'x';
+  return `${readable}_${stableHash(value)}`;
 }
 
 function customOptionDocId(categoryId: string, normalizedName: string): string {

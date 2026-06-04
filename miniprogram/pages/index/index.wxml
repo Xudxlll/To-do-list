@@ -55,7 +55,7 @@
         <view class="option-text">
           <text class="option-name">{{item.name}}</text>
         </view>
-        <view class="del-btn" bind:tap="onDeleteCustom" data-id="{{item.id}}">✕</view>
+        <view class="del-btn" catch:tap="onDeleteCustom" data-id="{{item.id}}">✕</view>
       </view>
     </view>
 

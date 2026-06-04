@@ -44,7 +44,15 @@ function extractCandidateName(content: string, verb: string): string {
   if (index < 0) return '';
   const tail = content.slice(index + verb.length).replace(/[，。！？、,.!?]/g, ' ');
   const token = tail.trim().split(/\s+/)[0] || '';
-  return token.replace(/^(了|一个|一次|一下|去|到)/, '').slice(0, 12);
+  let candidate = token;
+  let changed = true;
+  while (changed) {
+    const next = candidate.replace(/^(了|一个|一次|一下|去|到|的)/, '');
+    changed = next !== candidate;
+    candidate = next;
+  }
+  candidate = candidate.slice(0, 12);
+  return candidate.length >= 2 ? candidate : '';
 }
 
 export function recognizeDiaryTags(content: string, categories: Category[]): RecognizedTag[] {

@@ -44,6 +44,10 @@ Component({
       wx.navigateTo({ url: '/pages/index/index' });
     },
 
+    goDiary() {
+      wx.navigateTo({ url: '/pages/diary-home/diary-home' });
+    },
+
     viewPartnerChoice() {
       wx.navigateTo({ url: '/pages/result/result' });
     },

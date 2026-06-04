@@ -20,6 +20,11 @@
 
   <view class="screen-shade"></view>
 
+  <view class="diary-entry" bind:tap="goDiary">
+    <view class="diary-entry-icon">📖</view>
+    <view class="diary-entry-text">我们的日记</view>
+  </view>
+
   <view class="hero-copy">
     <view class="eyebrow">TODAY</view>
     <view class="hero-title">今天怎么过</view>

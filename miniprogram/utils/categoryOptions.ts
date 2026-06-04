@@ -34,8 +34,17 @@ export function clonePresetCategories(): Category[] {
 export function mergeCustomOptions(customOptions: CustomOptionRecord[]): Category[] {
   const categories = clonePresetCategories();
   customOptions.forEach(record => {
+    const name = typeof record.name === 'string' ? record.name.trim() : '';
+    const normalizedName = typeof record.normalizedName === 'string' && record.normalizedName.trim()
+      ? normalizeOptionName(record.normalizedName)
+      : normalizeOptionName(name);
+    if (!record.categoryId || !name || !normalizedName) return;
+
     const cat = categories.find(item => item.id === record.categoryId);
     if (!cat) return;
+
+    const exists = cat.options.some(item => normalizeOptionName(item.name) === normalizedName);
+    if (exists) return;
 
     let group = cat.optionGroups.find(item => item.id === OTHER_GROUP_ID);
     if (!group) {
@@ -43,12 +52,9 @@ export function mergeCustomOptions(customOptions: CustomOptionRecord[]): Categor
       cat.optionGroups.push(group);
     }
 
-    const exists = group.options.some(item => normalizeOptionName(item.name) === record.normalizedName);
-    if (exists) return;
-
     const option: Option = {
-      id: buildCustomOptionId(record.categoryId, record.normalizedName),
-      name: record.name,
+      id: buildCustomOptionId(record.categoryId, normalizedName),
+      name,
       emoji: '',
       isCustom: false,
     };

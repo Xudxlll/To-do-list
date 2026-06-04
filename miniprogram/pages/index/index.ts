@@ -1,4 +1,8 @@
-import { CATEGORIES, Option, OptionGroup, encodeShareData, ShareData } from '../../data/categories';
+import { Option, OptionGroup, encodeShareData, ShareData, Category } from '../../data/categories';
+import { mergeCustomOptions } from '../../utils/categoryOptions';
+import { listCustomOptions } from '../../services/customOptions';
+
+const INITIAL_CATEGORIES = mergeCustomOptions([]);
 
 const app = getApp<{
   globalData: {
@@ -13,11 +17,11 @@ let customCounter = 1;
 
 Component({
   data: {
-    categories: CATEGORIES,
-    currentCategoryId: 'eat',
-    currentCategory: CATEGORIES[0],
-    currentOptions: CATEGORIES[0].options.map(o => ({ ...o })),
-    currentOptionGroups: CATEGORIES[0].optionGroups.map(group => ({
+    categories: INITIAL_CATEGORIES,
+    currentCategoryId: INITIAL_CATEGORIES[0].id,
+    currentCategory: INITIAL_CATEGORIES[0],
+    currentOptions: INITIAL_CATEGORIES[0].options.map(o => ({ ...o })),
+    currentOptionGroups: INITIAL_CATEGORIES[0].optionGroups.map(group => ({
       ...group,
       options: group.options.map(o => ({ ...o })),
     })) as OptionGroup[],
@@ -34,6 +38,7 @@ Component({
     },
     ready() {
       this.refreshSelectionState();
+      this.loadCustomCategoryOptions();
     },
   },
 
@@ -71,8 +76,25 @@ Component({
       this.refreshCurrentOptions();
     },
 
+    async loadCustomCategoryOptions() {
+      const customOptions = await listCustomOptions();
+      const categories = mergeCustomOptions(customOptions);
+      const currentCategory = categories.find(cat => cat.id === this.data.currentCategoryId) || categories[0];
+      this.setData({
+        categories,
+        currentCategoryId: currentCategory.id,
+        currentCategory,
+        currentOptions: currentCategory.options.map(o => ({ ...o })),
+        currentOptionGroups: currentCategory.optionGroups.map(group => ({
+          ...group,
+          options: group.options.map(o => ({ ...o })),
+        })),
+      });
+      this.refreshSelectionState();
+    },
+
     selectCategory(catId: string) {
-      const cat = CATEGORIES.find(c => c.id === catId);
+      const cat = (this.data.categories as Category[]).find(c => c.id === catId);
       if (!cat || catId === this.data.currentCategoryId) return;
       this.setData({
         currentCategoryId: catId,
@@ -214,7 +236,7 @@ Component({
       const selections = Object.entries(g.selections)
         .filter(([_, opts]) => opts.length > 0)
         .map(([catId, opts]) => {
-          const cat = CATEGORIES.find(c => c.id === catId);
+          const cat = (this.data.categories as Category[]).find(c => c.id === catId);
           return { categoryId: catId, categoryName: cat ? cat.name : '', options: opts };
         });
       if (selections.length === 0) return { title: '今天干什么？', path: '/pages/result/result' };

@@ -1,0 +1,110 @@
+.calendar-page {
+  flex: 1;
+  background: linear-gradient(180deg, #FFF5F5 0%, #FFF9F1 100%);
+  padding: 28rpx;
+  box-sizing: border-box;
+}
+
+.month-header,
+.week-row,
+.day-grid {
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.month-header {
+  border-radius: 30rpx 30rpx 0 0;
+  padding: 24rpx;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.month-btn {
+  width: 70rpx;
+  height: 70rpx;
+  border: none;
+  border-radius: 50%;
+  color: #FF6B81;
+  background: #FFF0F2;
+  font-size: 40rpx;
+}
+
+.month-title {
+  font-size: 34rpx;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.week-row,
+.day-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+}
+
+.week-row {
+  padding: 18rpx 12rpx;
+  color: #B77986;
+  font-size: 24rpx;
+  text-align: center;
+}
+
+.day-grid {
+  border-radius: 0 0 30rpx 30rpx;
+  padding: 12rpx;
+}
+
+.day-cell {
+  position: relative;
+  height: 88rpx;
+  margin: 6rpx;
+  border-radius: 24rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-primary);
+  font-size: 28rpx;
+}
+
+.day-cell.muted {
+  color: #C9B8B8;
+}
+
+.day-cell.future {
+  color: #D8D8D8;
+}
+
+.day-cell.today {
+  background: #FFF0F2;
+  color: #FF6B81;
+  font-weight: 800;
+}
+
+.day-cell.has-diary {
+  border: 2rpx solid rgba(255, 107, 129, 0.28);
+}
+
+.dot {
+  position: absolute;
+  bottom: 12rpx;
+  width: 10rpx;
+  height: 10rpx;
+  border-radius: 50%;
+  background: #FF6B81;
+}
+
+.state-card {
+  padding: 60rpx 28rpx;
+  border-radius: 0 0 30rpx 30rpx;
+  background: rgba(255, 255, 255, 0.92);
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.retry-btn {
+  margin-top: 20rpx;
+  border: none;
+  border-radius: 999rpx;
+  padding: 14rpx 28rpx;
+  color: #fff;
+  background: #FF6B81;
+}

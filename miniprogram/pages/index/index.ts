@@ -53,7 +53,7 @@ Component({
           sel[s.categoryId] = s.options.map(o => ({ ...o }));
         });
         g.selections = sel;
-        g.saveSelections();
+        app.saveSelections();
         g.partnerShareData = null;
       }
     },

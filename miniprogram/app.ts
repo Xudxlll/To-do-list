@@ -13,6 +13,11 @@ interface IAppOption {
     selections: Record<string, Option[]>;
     partnerShareData: ShareData | null;
   };
+  handleShareEntry(options: WechatMiniprogram.App.LaunchShowOption): void;
+  getLockedState(): LockedState | null;
+  saveLockedState(shareData: ShareData): void;
+  clearLockedState(): void;
+  getDateString(): string;
   saveSelections(): void;
 }
 

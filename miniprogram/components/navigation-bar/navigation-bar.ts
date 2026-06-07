@@ -50,6 +50,10 @@ Component({
       type: Number,
       value: 1
     },
+    customBack: {
+      type: Boolean,
+      value: false
+    },
   },
   /**
    * 组件的初始数据
@@ -94,12 +98,22 @@ Component({
     },
     back() {
       const data = this.data
-      if (data.delta) {
+      if (data.customBack) {
+        this.triggerEvent('back', { delta: data.delta }, {})
+        return
+      }
+      if (data.delta && getCurrentPages().length > data.delta) {
         wx.navigateBack({
           delta: data.delta
         })
+      } else {
+        wx.reLaunch({ url: '/pages/welcome/welcome' })
       }
       this.triggerEvent('back', { delta: data.delta }, {})
+    },
+    home() {
+      wx.reLaunch({ url: '/pages/welcome/welcome' })
+      this.triggerEvent('home', {}, {})
     }
   },
 })

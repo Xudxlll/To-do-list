@@ -4,14 +4,15 @@
   <view wx:if="{{loading}}" class="state-card">正在打开日记...</view>
 
   <block wx:else>
-    <view class="date-card">{{date}}</view>
+    <view class="date-card">{{dateLabel}}</view>
 
     <view class="section-card">
-      <view class="section-title">今天的心情</view>
+      <view class="section-title">今天的心情 <text class="section-hint">可多选</text></view>
       <view class="mood-row">
-        <view wx:for="{{moods}}" wx:key="id" class="mood-item {{mood === item.id ? 'active' : ''}}" bind:tap="onMoodTap" data-id="{{item.id}}">
+        <view wx:for="{{moods}}" wx:key="id" class="mood-item {{moodSelections[item.id] ? 'active' : ''}}" bind:tap="onMoodTap" data-id="{{item.id}}">
           <view class="mood-emoji">{{item.emoji}}</view>
           <view class="mood-label">{{item.label}}</view>
+          <view wx:if="{{moodSelections[item.id]}}" class="mood-check">✓</view>
         </view>
       </view>
     </view>
@@ -41,7 +42,9 @@
       </view>
     </view>
 
-    <button class="save-btn {{saving ? 'btn-disabled' : ''}}" disabled="{{saving}}" bind:tap="onSaveTap">保存日记</button>
+    <view class="save-row">
+      <button class="save-btn {{saving ? 'btn-disabled' : ''}}" disabled="{{saving}}" bind:tap="onSaveTap">保存日记</button>
+    </view>
   </block>
 </scroll-view>
 

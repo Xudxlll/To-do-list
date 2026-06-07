@@ -63,12 +63,32 @@
 
 .content-header {
   padding: 24rpx 8rpx 20rpx;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
 }
 
 .content-title {
   font-size: 34rpx;
   font-weight: 700;
   color: var(--text-primary);
+}
+
+.sort-toggle {
+  flex-shrink: 0;
+  padding: 10rpx 22rpx;
+  border-radius: 999rpx;
+  background: #FFF;
+  color: var(--accent);
+  font-size: 24rpx;
+  font-weight: 700;
+  box-shadow: 0 4rpx 16rpx rgba(255, 107, 129, 0.1);
+}
+
+.sort-toggle.active {
+  color: #fff;
+  background: var(--accent);
 }
 
 .option-group {
@@ -171,6 +191,31 @@
   align-items: center;
   justify-content: center;
   margin-left: 10rpx;
+}
+
+.sort-actions {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  margin-left: 10rpx;
+  flex-shrink: 0;
+}
+
+.sort-btn {
+  width: 42rpx;
+  height: 42rpx;
+  border-radius: 50%;
+  background: #FFF0F3;
+  color: var(--accent);
+  font-size: 28rpx;
+  line-height: 40rpx;
+  text-align: center;
+  font-weight: 700;
+}
+
+.sort-btn.disabled {
+  color: #CFCFCF;
+  background: #F4F4F4;
 }
 
 .custom-input-row {

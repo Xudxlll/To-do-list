@@ -2,32 +2,34 @@
 
 <view class="calendar-page">
   <view class="month-header">
-    <button class="month-btn" bind:tap="prevMonth">‹</button>
-    <view class="month-title">{{currentMonthLabel}}</view>
-    <button class="month-btn" bind:tap="nextMonth">›</button>
+    <view class="month-btn {{!canPrevMonth ? 'disabled' : ''}}" bind:tap="prevMonth">‹</view>
+    <view class="month-title">{{currentMonthTitle}}</view>
+    <view class="month-btn {{!canNextMonth ? 'disabled' : ''}}" bind:tap="nextMonth">›</view>
   </view>
 
-  <view class="week-row">
-    <text wx:for="{{weekLabels}}" wx:key="*this" class="week-label">{{item}}</text>
-  </view>
+  <view class="calendar-card">
+    <view class="week-row">
+      <text wx:for="{{weekLabels}}" wx:key="*this" class="week-label">{{item}}</text>
+    </view>
 
-  <view wx:if="{{loading}}" class="state-card">正在加载月历...</view>
-  <view wx:elif="{{loadError}}" class="state-card">
-    <view>月历加载失败</view>
-    <button class="retry-btn" bind:tap="loadMonth">重试</button>
-  </view>
+    <view wx:if="{{loading}}" class="state-card">正在加载月历...</view>
+    <view wx:elif="{{loadError}}" class="state-card">
+      <view>月历加载失败</view>
+      <button class="retry-btn" bind:tap="loadMonth">重试</button>
+    </view>
 
-  <view wx:else class="day-grid">
-    <view
-      wx:for="{{days}}"
-      wx:key="date"
-      class="day-cell {{!item.inCurrentMonth ? 'muted' : ''}} {{item.isToday ? 'today' : ''}} {{item.isFuture ? 'future' : ''}} {{item.hasDiary ? 'has-diary' : ''}}"
-      bind:tap="onDayTap"
-      data-date="{{item.date}}"
-      data-future="{{item.isFuture}}"
-    >
-      <text>{{item.day}}</text>
-      <view wx:if="{{item.hasDiary}}" class="dot"></view>
+    <view wx:else class="day-grid">
+      <view
+        wx:for="{{days}}"
+        wx:key="date"
+        class="day-cell {{!item.inCurrentMonth ? 'muted' : ''}} {{item.isToday ? 'today' : ''}} {{item.isFuture ? 'future' : ''}} {{item.hasDiary ? 'has-diary' : ''}}"
+        bind:tap="onDayTap"
+        data-date="{{item.date}}"
+        data-future="{{item.isFuture}}"
+      >
+        <text class="day-number">{{item.day}}</text>
+        <view wx:if="{{item.hasDiary}}" class="dot"></view>
+      </view>
     </view>
   </view>
 </view>

@@ -101,3 +101,25 @@ export async function upsertCustomOptions(records: Array<{ categoryId: string; n
 
   return saved;
 }
+
+export async function deleteCustomOption(categoryId: string, name: string): Promise<void> {
+  const normalizedCategoryId = categoryId.trim();
+  const normalizedName = normalizeOptionName(name);
+  if (!normalizedCategoryId || !normalizedName) return;
+
+  const db = getCloudDb();
+  const collection = db.collection(CLOUD_COLLECTIONS.customOptions);
+  const res = await collection
+    .where({ categoryId: normalizedCategoryId, normalizedName })
+    .limit(20)
+    .get();
+
+  if (res.data.length === 0) {
+    await collection.doc(customOptionDocId(normalizedCategoryId, normalizedName)).remove();
+    return;
+  }
+
+  for (const item of res.data as Array<{ _id?: string }>) {
+    if (item._id) await collection.doc(item._id).remove();
+  }
+}

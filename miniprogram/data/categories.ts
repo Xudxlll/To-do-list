@@ -3,6 +3,7 @@ export interface Option {
   name: string;
   emoji: string;
   isCustom: boolean;
+  canDelete?: boolean;
   description?: string;
 }
 
@@ -236,9 +237,39 @@ export function encodeShareData(data: ShareData): string {
   return encodeURIComponent(JSON.stringify(data));
 }
 
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isValidOption(value: unknown): value is Option {
+  if (!isObject(value)) return false;
+  return typeof value.id === 'string'
+    && typeof value.name === 'string'
+    && typeof value.emoji === 'string'
+    && typeof value.isCustom === 'boolean';
+}
+
+export function validateShareData(value: unknown): value is ShareData {
+  if (!isObject(value)) return false;
+  if (typeof value.fromUser !== 'string') return false;
+  if (typeof value.timestamp !== 'number') return false;
+  if (value.mode !== undefined && value.mode !== 'selection' && value.mode !== 'freeText') return false;
+  if (value.freeText !== undefined && typeof value.freeText !== 'string') return false;
+  if (!Array.isArray(value.selections)) return false;
+
+  return value.selections.every(selection => {
+    if (!isObject(selection)) return false;
+    return typeof selection.categoryId === 'string'
+      && typeof selection.categoryName === 'string'
+      && Array.isArray(selection.options)
+      && selection.options.every(isValidOption);
+  });
+}
+
 export function decodeShareData(encoded: string): ShareData | null {
   try {
-    return JSON.parse(decodeURIComponent(encoded)) as ShareData;
+    const parsed = JSON.parse(decodeURIComponent(encoded));
+    return validateShareData(parsed) ? parsed : null;
   } catch {
     return null;
   }

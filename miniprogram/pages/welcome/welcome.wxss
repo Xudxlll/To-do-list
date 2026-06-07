@@ -12,7 +12,7 @@ page {
 
 .memory-collage {
   position: absolute;
-  top: 246rpx;
+  top: 306rpx;
   right: 0;
   bottom: 210rpx;
   left: 0;
@@ -257,12 +257,11 @@ page {
 }
 
 .diary-entry {
-  position: absolute;
-  right: 28rpx;
-  top: calc(150rpx + env(safe-area-inset-top));
-  z-index: 3;
+  width: 224rpx;
+  margin: 24rpx auto 0;
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 10rpx;
   padding: 16rpx 20rpx;
   border-radius: 22rpx;
@@ -284,7 +283,7 @@ page {
   position: absolute;
   left: 48rpx;
   right: 48rpx;
-  top: 52rpx;
+  top: 16rpx;
   z-index: 2;
   text-align: center;
 }

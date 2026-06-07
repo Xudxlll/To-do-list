@@ -2,14 +2,22 @@ import { listDiaryDatesByMonth, listRecentDiaries } from '../../services/diaries
 import { DiaryRecord, DiaryTimelineItem, MOODS } from '../../types/diary';
 import { monthKey, todayString } from '../../utils/date';
 
+function normalizeRecordMoods(record: DiaryRecord) {
+  const ids = record.moods && record.moods.length > 0 ? record.moods : [record.mood];
+  return ids
+    .map(id => MOODS.find(item => item.id === id))
+    .filter((item): item is typeof MOODS[number] => !!item);
+}
+
 function buildTimelineItem(record: DiaryRecord): DiaryTimelineItem {
-  const mood = MOODS.find(item => item.id === record.mood) || MOODS[0];
+  const moods = normalizeRecordMoods(record);
+  const displayMoods = moods.length > 0 ? moods : [MOODS[0]];
   return {
     ...record,
     summary: record.content.length > 42 ? `${record.content.slice(0, 42)}...` : record.content,
     coverFileId: record.photoFileIds[0] || '',
-    moodEmoji: mood.emoji,
-    moodLabel: mood.label,
+    moodEmoji: displayMoods.map(item => item.emoji).join(''),
+    moodLabel: displayMoods.map(item => item.label).join('、'),
   };
 }
 
@@ -21,12 +29,6 @@ Component({
     currentMonth: monthKey(todayString()),
     monthDiaryCount: 0,
     timeline: [] as DiaryTimelineItem[],
-  },
-
-  lifetimes: {
-    attached() {
-      this.loadDiaries();
-    },
   },
 
   pageLifetimes: {

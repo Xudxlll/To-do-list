@@ -4,16 +4,60 @@ import { getDiaryByDate, saveDiary, uploadDiaryPhotos } from '../../services/dia
 import { DiaryDraft, DiaryRecord, MOODS, MoodId, RecognizedTag } from '../../types/diary';
 import { buildCustomOptionId, mergeCustomOptions, normalizeOptionName } from '../../utils/categoryOptions';
 import { clearDiaryDraft, readDiaryDraft, saveDiaryDraft } from '../../utils/diaryDraft';
-import { recognizeDiaryTags } from '../../utils/diaryTags';
-import { isFutureDate, todayString } from '../../utils/date';
+import { recognizeDiaryTagsForDiary } from '../../utils/diaryTags';
+import { formatDiaryDateLabel, isFutureDate, isSupportedDiaryDate, todayString } from '../../utils/date';
+
+let draftSaveTimer: number | null = null;
+
+function normalizeMoodIds(value: unknown, fallback: MoodId): MoodId[] {
+  const valid: Record<string, boolean> = {};
+  MOODS.forEach(item => {
+    valid[item.id] = true;
+  });
+  const source = Array.isArray(value) ? value : [fallback];
+  const moods = source.filter((item): item is MoodId => typeof item === 'string' && !!valid[item]);
+  return moods.length > 0 ? moods : [fallback];
+}
+
+function buildMoodSelections(moods: MoodId[]): Record<string, boolean> {
+  return moods.reduce((acc, mood) => {
+    acc[mood] = true;
+    return acc;
+  }, {} as Record<string, boolean>);
+}
+
+function formatSaveError(error: unknown): string {
+  if (error && typeof error === 'object') {
+    const err = error as { errCode?: number; errMsg?: string; message?: string };
+    const message = err.errMsg || err.message || '';
+    if (message.indexOf('duplicate key') >= 0 && message.indexOf('dup key: { : null }') >= 0) {
+      return 'diaries 集合的 date 唯一索引配置异常，或仍有 date 为空的脏记录。请删除 date 唯一索引，不要重建，并删除 date 为空/缺失的记录。';
+    }
+    if (err.errMsg) return err.errCode ? `${err.errCode}: ${err.errMsg}` : err.errMsg;
+    if (err.message) return err.message;
+  }
+  return String(error || '未知错误');
+}
 
 Component({
+  lifetimes: {
+    detached() {
+      if (draftSaveTimer !== null) {
+        clearTimeout(draftSaveTimer);
+        draftSaveTimer = null;
+      }
+    },
+  },
+
   data: {
     date: todayString(),
+    dateLabel: formatDiaryDateLabel(todayString()),
     loading: true,
     saving: false,
     content: '',
     mood: 'happy' as MoodId,
+    selectedMoodIds: ['happy'] as MoodId[],
+    moodSelections: buildMoodSelections(['happy']),
     location: '',
     localPhotoPaths: [] as string[],
     existingPhotoFileIds: [] as string[],
@@ -23,25 +67,25 @@ Component({
     tagCategories: [] as Array<{ id: string; name: string }>,
     tagCategoryNames: [] as string[],
     existingRecord: null as DiaryRecord | null,
+    initialized: false,
   },
 
-  lifetimes: {
-    attached() {
-      const pages = getCurrentPages();
-      const page = pages[pages.length - 1];
-      const opts = (page as { options?: Record<string, string> }).options || {};
-      const date = opts.date || todayString();
+  methods: {
+    onLoad(options: Record<string, string>) {
+      const date = options.date || todayString();
+      if (!isSupportedDiaryDate(date)) {
+        wx.showToast({ title: '这个日期暂不支持写日记', icon: 'none' });
+        wx.navigateBack();
+        return;
+      }
       if (isFutureDate(date)) {
         wx.showToast({ title: '未来日期还不能写哦', icon: 'none' });
         wx.navigateBack();
         return;
       }
-      this.setData({ date });
+      this.setData({ date, dateLabel: formatDiaryDateLabel(date), initialized: true });
       this.loadDiary(date);
     },
-  },
-
-  methods: {
     async loadDiary(date: string) {
       this.setData({ loading: true });
       try {
@@ -52,10 +96,13 @@ Component({
           wx.showToast({ title: '已恢复本地草稿', icon: 'none' });
           this.applyDraft(draft);
         } else if (record) {
+          const selectedMoodIds = normalizeMoodIds(record.moods, record.mood);
           this.setData({
             existingRecord: record,
             content: record.content,
-            mood: record.mood,
+            mood: selectedMoodIds[0],
+            selectedMoodIds,
+            moodSelections: buildMoodSelections(selectedMoodIds),
             location: record.location,
             existingPhotoFileIds: record.photoFileIds,
             localPhotoPaths: [],
@@ -70,9 +117,12 @@ Component({
     },
 
     applyDraft(draft: DiaryDraft) {
+      const selectedMoodIds = normalizeMoodIds(draft.moods, draft.mood);
       this.setData({
         content: draft.content,
-        mood: draft.mood,
+        mood: selectedMoodIds[0],
+        selectedMoodIds,
+        moodSelections: buildMoodSelections(selectedMoodIds),
         location: draft.location,
         localPhotoPaths: draft.localPhotoPaths,
         existingPhotoFileIds: draft.existingPhotoFileIds,
@@ -80,10 +130,15 @@ Component({
     },
 
     persistDraft() {
+      if (draftSaveTimer !== null) {
+        clearTimeout(draftSaveTimer);
+        draftSaveTimer = null;
+      }
       saveDiaryDraft({
         date: this.data.date,
         content: this.data.content,
         mood: this.data.mood,
+        moods: this.data.selectedMoodIds,
         location: this.data.location,
         localPhotoPaths: this.data.localPhotoPaths,
         existingPhotoFileIds: this.data.existingPhotoFileIds,
@@ -91,18 +146,38 @@ Component({
       });
     },
 
+    schedulePersistDraft() {
+      if (draftSaveTimer !== null) clearTimeout(draftSaveTimer);
+      draftSaveTimer = setTimeout(() => {
+        draftSaveTimer = null;
+        this.persistDraft();
+      }, 300);
+    },
+
     onContentInput(e: WechatMiniprogram.Input) {
       this.setData({ content: e.detail.value });
-      this.persistDraft();
+      this.schedulePersistDraft();
     },
 
     onLocationInput(e: WechatMiniprogram.Input) {
       this.setData({ location: e.detail.value });
-      this.persistDraft();
+      this.schedulePersistDraft();
     },
 
     onMoodTap(e: WechatMiniprogram.TouchEvent) {
-      this.setData({ mood: e.currentTarget.dataset.id as MoodId });
+      const id = e.currentTarget.dataset.id as MoodId;
+      const selected = this.data.selectedMoodIds.slice();
+      const index = selected.indexOf(id);
+      if (index >= 0) {
+        if (selected.length === 1) {
+          wx.showToast({ title: '至少保留一个心情', icon: 'none' });
+          return;
+        }
+        selected.splice(index, 1);
+      } else {
+        selected.push(id);
+      }
+      this.setData({ mood: selected[0], selectedMoodIds: selected, moodSelections: buildMoodSelections(selected) });
       this.persistDraft();
     },
 
@@ -146,7 +221,7 @@ Component({
       }
       const customOptions = await listCustomOptions();
       const categories = mergeCustomOptions(customOptions);
-      const recognizedTags = recognizeDiaryTags(this.data.content, categories);
+      const recognizedTags = recognizeDiaryTagsForDiary(this.data.content, this.data.location, categories);
       const tagCategories = categories.map((cat: Category) => ({ id: cat.id, name: cat.name }));
       this.setData({
         recognizedTags,
@@ -199,19 +274,37 @@ Component({
       this.setData({ tagPanelVisible: false });
     },
 
+    keepUploadedPhotosInDraft(uploadedFileIds: string[]): string[] {
+      const photoFileIds = this.data.existingPhotoFileIds.concat(uploadedFileIds).slice(0, 3);
+      if (uploadedFileIds.length > 0) {
+        this.setData({
+          existingPhotoFileIds: photoFileIds,
+          localPhotoPaths: [],
+        });
+        this.persistDraft();
+      }
+      return photoFileIds;
+    },
+
     async confirmSave() {
       this.setData({ saving: true });
       try {
         const candidateTags = this.data.recognizedTags.filter(tag => tag.source === 'candidate' && tag.name.trim());
-        await upsertCustomOptions(candidateTags.map(tag => ({ categoryId: tag.categoryId, name: tag.name })));
+        try {
+          await upsertCustomOptions(candidateTags.map(tag => ({ categoryId: tag.categoryId, name: tag.name })));
+        } catch (tagError) {
+          console.warn('同步日记新标签失败，将继续保存日记', tagError);
+        }
         const uploadedFileIds = await uploadDiaryPhotos(this.data.date, this.data.localPhotoPaths);
-        const photoFileIds = this.data.existingPhotoFileIds.concat(uploadedFileIds).slice(0, 3);
+        const photoFileIds = this.keepUploadedPhotosInDraft(uploadedFileIds);
+        const date = this.data.date;
         const now = Date.now();
         const record: DiaryRecord = {
           _id: this.data.existingRecord ? this.data.existingRecord._id : undefined,
-          date: this.data.date,
+          date,
           content: this.data.content.trim(),
-          mood: this.data.mood,
+          mood: this.data.selectedMoodIds[0],
+          moods: this.data.selectedMoodIds,
           location: this.data.location.trim(),
           photoFileIds,
           tags: this.data.recognizedTags
@@ -228,10 +321,21 @@ Component({
         await saveDiary(record);
         clearDiaryDraft(this.data.date);
         wx.showToast({ title: '日记已保存', icon: 'success' });
-        setTimeout(() => wx.navigateBack(), 800);
+        setTimeout(() => {
+          if (getCurrentPages().length > 1) {
+            wx.navigateBack();
+          } else {
+            wx.redirectTo({ url: '/pages/diary-home/diary-home' });
+          }
+        }, 800);
       } catch (e) {
         console.warn('保存日记失败', e);
-        wx.showToast({ title: '保存失败，草稿已保留', icon: 'none' });
+        wx.showModal({
+          title: '保存失败',
+          content: `草稿和照片已保留。\n\n错误：${formatSaveError(e)}`,
+          showCancel: false,
+          confirmText: '知道了',
+        });
       } finally {
         this.setData({ saving: false, tagPanelVisible: false });
       }

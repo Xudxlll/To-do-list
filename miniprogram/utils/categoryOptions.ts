@@ -57,6 +57,7 @@ export function mergeCustomOptions(customOptions: CustomOptionRecord[]): Categor
       name,
       emoji: '',
       isCustom: false,
+      canDelete: true,
     };
     group.options.push(option);
     cat.options.push(option);

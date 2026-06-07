@@ -5,6 +5,13 @@ function diaryDocId(date: string): string {
   return `diary_${date.replace(/[^0-9]/g, '_')}`;
 }
 
+function assertDiaryDate(date: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    throw new Error(`日记日期无效：${date || '空'}`);
+  }
+  return date;
+}
+
 function nextMonthKey(monthKey: string): string {
   const parts = monthKey.split('-').map(Number);
   const d = new Date(parts[0], parts[1], 1);
@@ -24,6 +31,21 @@ function getPhotoExtension(path: string): string {
     heic: true,
   };
   return allowed[ext] ? ext : 'jpg';
+}
+
+function diaryRecordToData(record: DiaryRecord): Partial<DiaryRecord> {
+  const date = assertDiaryDate(record.date);
+  return {
+    date,
+    content: record.content || '',
+    mood: record.mood,
+    moods: record.moods && record.moods.length > 0 ? record.moods : [record.mood],
+    location: record.location || '',
+    photoFileIds: Array.isArray(record.photoFileIds) ? record.photoFileIds : [],
+    tags: Array.isArray(record.tags) ? record.tags : [],
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
+  };
 }
 
 export async function listRecentDiaries(limit = 30): Promise<DiaryRecord[]> {
@@ -56,6 +78,7 @@ export async function listDiaryDatesByMonth(monthKey: string): Promise<string[]>
 }
 
 export async function getDiaryByDate(date: string): Promise<DiaryRecord | null> {
+  assertDiaryDate(date);
   const db = getCloudDb();
   const collection = db.collection(CLOUD_COLLECTIONS.diaries);
   const docId = diaryDocId(date);
@@ -74,6 +97,7 @@ export async function getDiaryByDate(date: string): Promise<DiaryRecord | null> 
 }
 
 export async function uploadDiaryPhotos(date: string, localPaths: string[]): Promise<string[]> {
+  assertDiaryDate(date);
   const uploaded: string[] = [];
   for (let i = 0; i < localPaths.length; i += 1) {
     const path = localPaths[i];
@@ -90,20 +114,44 @@ export async function uploadDiaryPhotos(date: string, localPaths: string[]): Pro
 }
 
 export async function saveDiary(record: DiaryRecord): Promise<DiaryRecord> {
+  const date = assertDiaryDate(record.date);
   const db = getCloudDb();
   const collection = db.collection(CLOUD_COLLECTIONS.diaries);
-  const existing = await getDiaryByDate(record.date);
+  let existing: DiaryRecord | null = null;
+  try {
+    existing = await getDiaryByDate(date);
+  } catch (e) {
+    console.warn('读取已有日记失败，将尝试直接保存', e);
+  }
   const now = Date.now();
-  const docId = diaryDocId(record.date);
+  const docId = diaryDocId(date);
   const saved: DiaryRecord = {
     ...record,
     _id: docId,
+    date,
+    mood: record.moods && record.moods.length > 0 ? record.moods[0] : record.mood,
+    moods: record.moods && record.moods.length > 0 ? record.moods : [record.mood],
     createdAt: existing && existing.createdAt ? existing.createdAt : record.createdAt || now,
     updatedAt: now,
   };
 
-  const data: Partial<DiaryRecord> = { ...saved };
-  delete data._id;
-  await collection.doc(docId).set({ data });
+  const data = diaryRecordToData(saved);
+  try {
+    await collection.doc(docId).set({ data });
+  } catch (setError) {
+    console.warn('按固定文档 ID 保存失败，将尝试按日期更新', setError);
+    const latest = await collection
+      .where({ date })
+      .limit(1)
+      .get();
+
+    if (latest.data.length > 0) {
+      const latestRecord = latest.data[0] as DiaryRecord;
+      await collection.doc(latestRecord._id as string).update({ data: diaryRecordToData(saved) });
+      return { ...saved, _id: latestRecord._id };
+    }
+
+    throw setError;
+  }
   return saved;
 }

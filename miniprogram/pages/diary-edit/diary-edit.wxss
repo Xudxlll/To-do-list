@@ -38,23 +38,34 @@
   color: var(--text-primary);
 }
 
+.section-hint {
+  margin-left: 10rpx;
+  font-size: 22rpx;
+  font-weight: 500;
+  color: #B77986;
+}
+
 .mood-row {
   display: flex;
   gap: 14rpx;
 }
 
 .mood-item {
+  position: relative;
   flex: 1;
   border-radius: 22rpx;
   padding: 18rpx 8rpx;
   text-align: center;
   background: #FFF7F7;
   color: #B77986;
+  border: 2rpx solid transparent;
 }
 
 .mood-item.active {
   background: #FF6B81;
   color: #fff;
+  border-color: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 12rpx 24rpx rgba(255, 107, 129, 0.22);
 }
 
 .mood-emoji {
@@ -64,6 +75,20 @@
 .mood-label {
   margin-top: 8rpx;
   font-size: 22rpx;
+}
+
+.mood-check {
+  position: absolute;
+  right: 10rpx;
+  top: 8rpx;
+  width: 28rpx;
+  height: 28rpx;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.95);
+  color: #FF6B81;
+  font-size: 20rpx;
+  line-height: 28rpx;
+  font-weight: 800;
 }
 
 .content-input {
@@ -121,9 +146,16 @@
   font-size: 60rpx;
 }
 
-.save-btn {
+.save-row {
   width: 100%;
   margin: 34rpx 0 60rpx;
+  display: flex;
+  justify-content: center;
+}
+
+.save-btn {
+  width: 520rpx;
+  margin: 0;
   border: none;
   border-radius: 999rpx;
   padding: 24rpx;
@@ -131,6 +163,10 @@
   font-size: 32rpx;
   font-weight: 700;
   background: linear-gradient(135deg, #FF6B81, #FF9A8B);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1.35;
 }
 
 .save-btn.btn-disabled {

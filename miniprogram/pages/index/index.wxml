@@ -1,4 +1,4 @@
-<navigation-bar title="今天干什么" back="{{false}}" color="black" background="#FFF5F5"></navigation-bar>
+<navigation-bar title="今天干什么" back="{{true}}" customBack="{{returnToPartnerWelcome}}" bind:back="onNavBack" color="black" background="#FFF5F5"></navigation-bar>
 
 <view class="main-layout">
   <scroll-view class="left-sidebar" scroll-y type="list" enhanced show-scrollbar="{{false}}">
@@ -18,6 +18,7 @@
   <scroll-view class="right-content" scroll-y type="list" enhanced show-scrollbar="{{false}}">
     <view class="content-header">
       <text class="content-title">{{currentCategory.icon}} {{currentCategory.name}}</text>
+      <view class="sort-toggle {{sortMode ? 'active' : ''}}" bind:tap="toggleSortMode">{{sortMode ? '完成' : '排序'}}</view>
     </view>
 
     <view wx:for="{{currentOptionGroups}}" wx:key="id" wx:for-item="group" class="option-group">
@@ -26,6 +27,7 @@
         wx:for="{{group.options}}"
         wx:key="id"
         wx:for-item="item"
+        wx:for-index="optionIndex"
         class="option-item {{selectedIds[item.id] ? 'selected' : ''}}"
         bind:tap="onToggleOption"
         data-option="{{item}}"
@@ -37,6 +39,11 @@
           <text class="option-name">{{item.name}}</text>
           <text wx:if="{{item.description}}" class="option-desc">{{item.description}}</text>
         </view>
+        <view wx:if="{{sortMode}}" class="sort-actions">
+          <view class="sort-btn {{optionIndex === 0 ? 'disabled' : ''}}" catch:tap="onMoveOption" data-group-id="{{group.id}}" data-option-id="{{item.id}}" data-direction="up">↑</view>
+          <view class="sort-btn {{optionIndex === group.options.length - 1 ? 'disabled' : ''}}" catch:tap="onMoveOption" data-group-id="{{group.id}}" data-option-id="{{item.id}}" data-direction="down">↓</view>
+        </view>
+        <view wx:if="{{item.canDelete}}" class="del-btn" catch:tap="onDeleteCloudCustom" data-option="{{item}}">✕</view>
       </view>
     </view>
 

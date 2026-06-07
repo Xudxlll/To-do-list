@@ -14,14 +14,26 @@ function normalizeMood(value: unknown): MoodId {
   return found ? found.id : MOODS[0].id;
 }
 
+function normalizeMoods(value: unknown, fallback: MoodId): MoodId[] {
+  const source = Array.isArray(value) ? value : [fallback];
+  const valid: Record<string, boolean> = {};
+  MOODS.forEach(item => {
+    valid[item.id] = true;
+  });
+  const moods = source.filter((item): item is MoodId => typeof item === 'string' && !!valid[item]);
+  return moods.length > 0 ? moods : [fallback];
+}
+
 function normalizeDraft(value: unknown, date: string): DiaryDraft | null {
   if (!isObject(value)) return null;
   if (value.date !== date) return null;
 
+  const mood = normalizeMood(value.mood);
   return {
     date,
     content: typeof value.content === 'string' ? value.content : '',
-    mood: normalizeMood(value.mood),
+    mood,
+    moods: normalizeMoods(value.moods, mood),
     location: typeof value.location === 'string' ? value.location : '',
     localPhotoPaths: isStringArray(value.localPhotoPaths) ? value.localPhotoPaths : [],
     existingPhotoFileIds: isStringArray(value.existingPhotoFileIds) ? value.existingPhotoFileIds : [],
@@ -42,9 +54,17 @@ export function readDiaryDraft(date: string): DiaryDraft | null {
 }
 
 export function saveDiaryDraft(draft: DiaryDraft): void {
-  wx.setStorageSync(diaryDraftKey(draft.date), { ...draft, updatedAt: Date.now() });
+  try {
+    wx.setStorageSync(diaryDraftKey(draft.date), { ...draft, updatedAt: Date.now() });
+  } catch (e) {
+    console.warn('保存日记草稿失败', e);
+  }
 }
 
 export function clearDiaryDraft(date: string): void {
-  wx.removeStorageSync(diaryDraftKey(date));
+  try {
+    wx.removeStorageSync(diaryDraftKey(date));
+  } catch (e) {
+    console.warn('清理日记草稿失败', e);
+  }
 }

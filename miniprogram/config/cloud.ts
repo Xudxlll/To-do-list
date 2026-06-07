@@ -1,6 +1,7 @@
 export const CLOUD_COLLECTIONS = {
   diaries: 'diaries',
   customOptions: 'custom_options',
+  lockedPlans: 'locked_plans',
 };
 
 let cloudReady = false;

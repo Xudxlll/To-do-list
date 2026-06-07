@@ -26,6 +26,7 @@ export interface DiaryRecord {
   date: string;
   content: string;
   mood: MoodId;
+  moods?: MoodId[];
   location: string;
   photoFileIds: string[];
   tags: DiaryTag[];
@@ -37,6 +38,7 @@ export interface DiaryDraft {
   date: string;
   content: string;
   mood: MoodId;
+  moods?: MoodId[];
   location: string;
   localPhotoPaths: string[];
   existingPhotoFileIds: string[];

@@ -1,6 +1,7 @@
 import { Option, OptionGroup, encodeShareData, ShareData, Category } from '../../data/categories';
-import { mergeCustomOptions } from '../../utils/categoryOptions';
-import { listCustomOptions } from '../../services/customOptions';
+import { buildCustomOptionId, mergeCustomOptions, normalizeOptionName } from '../../utils/categoryOptions';
+import { applyOptionOrder, moveOptionInGroups, readOptionOrder, saveGroupOptionOrder } from '../../utils/optionOrder';
+import { deleteCustomOption, listCustomOptions, upsertCustomOptions } from '../../services/customOptions';
 
 const INITIAL_CATEGORIES = mergeCustomOptions([]);
 
@@ -14,6 +15,14 @@ const app = getApp<{
 }>();
 
 let customCounter = 1;
+
+function buildOrderedGroups(category: Category): OptionGroup[] {
+  return applyOptionOrder(category.optionGroups, category.id, readOptionOrder());
+}
+
+function flattenGroups(groups: OptionGroup[]): Option[] {
+  return groups.reduce((all, group) => all.concat(group.options), [] as Option[]);
+}
 
 Component({
   data: {
@@ -30,6 +39,8 @@ Component({
     selectedCounts: {} as Record<string, number>,
     inputValue: '',
     totalCount: 0,
+    sortMode: false,
+    returnToPartnerWelcome: false,
   },
 
   lifetimes: {
@@ -50,6 +61,17 @@ Component({
   },
 
   methods: {
+    onLoad(options: Record<string, string>) {
+      this.setData({ returnToPartnerWelcome: options.returnTo === 'partnerWelcome' });
+    },
+
+    isPartnerWelcomeReturnRoute(): boolean {
+      if (this.data.returnToPartnerWelcome) return true;
+      const pages = getCurrentPages();
+      const current = pages[pages.length - 1] as WechatMiniprogram.Page.Instance<Record<string, unknown>, Record<string, unknown>> & { options?: Record<string, string> };
+      return !!current && current.options && current.options.returnTo === 'partnerWelcome';
+    },
+
     loadShareDataIfPresent() {
       const g = app.globalData;
       if (g.partnerShareData) {
@@ -59,7 +81,25 @@ Component({
         });
         g.selections = sel;
         app.saveSelections();
-        g.partnerShareData = null;
+        if (!this.isPartnerWelcomeReturnRoute()) {
+          g.partnerShareData = null;
+        }
+      }
+    },
+
+    onNavBack() {
+      if (this.data.returnToPartnerWelcome) {
+        if (getCurrentPages().length > 2) {
+          wx.navigateBack({ delta: 2 });
+        } else {
+          wx.reLaunch({ url: '/pages/welcome/welcome' });
+        }
+        return;
+      }
+      if (getCurrentPages().length > 1) {
+        wx.navigateBack();
+      } else {
+        wx.reLaunch({ url: '/pages/welcome/welcome' });
       }
     },
 
@@ -80,15 +120,13 @@ Component({
       const customOptions = await listCustomOptions();
       const categories = mergeCustomOptions(customOptions);
       const currentCategory = categories.find(cat => cat.id === this.data.currentCategoryId) || categories[0];
+      const currentOptionGroups = buildOrderedGroups(currentCategory);
       this.setData({
         categories,
         currentCategoryId: currentCategory.id,
         currentCategory,
-        currentOptions: currentCategory.options.map(o => ({ ...o })),
-        currentOptionGroups: currentCategory.optionGroups.map(group => ({
-          ...group,
-          options: group.options.map(o => ({ ...o })),
-        })),
+        currentOptions: flattenGroups(currentOptionGroups),
+        currentOptionGroups,
       });
       this.refreshSelectionState();
     },
@@ -96,15 +134,14 @@ Component({
     selectCategory(catId: string) {
       const cat = (this.data.categories as Category[]).find(c => c.id === catId);
       if (!cat || catId === this.data.currentCategoryId) return;
+      const currentOptionGroups = buildOrderedGroups(cat);
       this.setData({
         currentCategoryId: catId,
         currentCategory: cat,
-        currentOptions: cat.options.map(o => ({ ...o })),
-        currentOptionGroups: cat.optionGroups.map(group => ({
-          ...group,
-          options: group.options.map(o => ({ ...o })),
-        })),
+        currentOptions: flattenGroups(currentOptionGroups),
+        currentOptionGroups,
         inputValue: '',
+        sortMode: false,
       });
       this.refreshCurrentOptions();
     },
@@ -144,7 +181,26 @@ Component({
       this.selectCategory(e.currentTarget.dataset.id as string);
     },
 
+    toggleSortMode() {
+      this.setData({ sortMode: !this.data.sortMode });
+    },
+
+    onMoveOption(e: WechatMiniprogram.TouchEvent) {
+      const groupId = e.currentTarget.dataset.groupId as string;
+      const optionId = e.currentTarget.dataset.optionId as string;
+      const direction = e.currentTarget.dataset.direction as 'up' | 'down';
+      const currentOptionGroups = moveOptionInGroups(this.data.currentOptionGroups, groupId, optionId, direction);
+      const group = currentOptionGroups.find(item => item.id === groupId);
+      if (group) saveGroupOptionOrder(this.data.currentCategoryId, groupId, group.options.map(option => option.id));
+      this.setData({
+        currentOptionGroups,
+        currentOptions: flattenGroups(currentOptionGroups),
+      });
+      this.refreshCurrentOptions();
+    },
+
     onToggleOption(e: WechatMiniprogram.TouchEvent) {
+      if (this.data.sortMode) return;
       const option = e.currentTarget.dataset.option as Option;
       if (!option) return;
       const g = app.globalData;
@@ -183,16 +239,58 @@ Component({
       this.setData({ inputValue: e.detail.value });
     },
 
-    onAddCustom() {
+    async onAddCustom() {
       const name = this.data.inputValue.trim();
       if (!name) return;
-      const customOption: Option = { id: `custom_${Date.now()}_${customCounter++}`, name, emoji: '', isCustom: true };
+      const normalizedName = normalizeOptionName(name);
+      const existing = this.data.currentOptions.find(option => normalizeOptionName(option.name) === normalizedName);
+      if (existing) {
+        this.selectOptionIfNeeded(existing);
+        this.setData({ inputValue: '' });
+        return;
+      }
+
+      try {
+        await upsertCustomOptions([{ categoryId: this.data.currentCategoryId, name }]);
+        await this.loadCustomCategoryOptions();
+        const cloudOptionId = buildCustomOptionId(this.data.currentCategoryId, normalizedName);
+        const cloudOption = this.data.currentOptions.find(option => option.id === cloudOptionId);
+        if (cloudOption) this.selectOptionIfNeeded(cloudOption);
+        this.setData({ inputValue: '' });
+      } catch (e) {
+        console.warn('新增共享标签失败，已保留为本地自定义', e);
+        const customOption: Option = { id: `custom_${Date.now()}_${customCounter++}`, name, emoji: '', isCustom: true };
+        this.addLocalCustomOption(customOption);
+        wx.showToast({ title: '云端新增失败，已临时添加', icon: 'none' });
+      }
+    },
+
+    selectOptionIfNeeded(option: Option) {
+      const g = app.globalData;
+      const catId = this.data.currentCategoryId;
+      if (!g.selections[catId]) g.selections[catId] = [];
+      if (!g.selections[catId].some(item => item.id === option.id)) {
+        g.selections[catId].push(option);
+      }
+      this.updateSelectionSummary({ ...this.data.selectedIds, [option.id]: true });
+    },
+
+    addLocalCustomOption(customOption: Option) {
       const g = app.globalData;
       const catId = this.data.currentCategoryId;
       if (!g.selections[catId]) g.selections[catId] = [];
       g.selections[catId].push(customOption);
 
       const customOpts = [...this.data.currentCustomOptions, customOption];
+      this.setData({
+        currentCustomOptions: customOpts,
+        inputValue: '',
+      });
+      this.updateSelectionSummary({ ...this.data.selectedIds, [customOption.id]: true });
+    },
+
+    updateSelectionSummary(selectedIds: Record<string, boolean>) {
+      const g = app.globalData;
       let total = 0;
       const counts: Record<string, number> = {};
       Object.entries(g.selections).forEach(([cid, opts]) => {
@@ -201,9 +299,7 @@ Component({
       });
       app.saveSelections();
       this.setData({
-        currentCustomOptions: customOpts,
-        inputValue: '',
-        selectedIds: { ...this.data.selectedIds, [customOption.id]: true },
+        selectedIds,
         selectedCounts: counts,
         totalCount: total,
       });
@@ -232,6 +328,39 @@ Component({
         selectedCounts: counts,
         totalCount: total,
       });
+    },
+
+    onDeleteCloudCustom(e: WechatMiniprogram.TouchEvent) {
+      const option = e.currentTarget.dataset.option as Option;
+      if (!option || !option.canDelete) return;
+      wx.showModal({
+        title: '删除标签',
+        content: `确定删除「${option.name}」吗？`,
+        confirmText: '删除',
+        confirmColor: '#FF6B81',
+        success: async res => {
+          if (!res.confirm) return;
+          try {
+            await deleteCustomOption(this.data.currentCategoryId, option.name);
+            this.removeOptionFromSelections(option.id);
+            await this.loadCustomCategoryOptions();
+            wx.showToast({ title: '已删除', icon: 'success' });
+          } catch (err) {
+            console.warn('删除共享标签失败', err);
+            wx.showToast({ title: '删除失败', icon: 'none' });
+          }
+        },
+      });
+    },
+
+    removeOptionFromSelections(optionId: string) {
+      const g = app.globalData;
+      const catId = this.data.currentCategoryId;
+      if (g.selections[catId]) {
+        g.selections[catId] = g.selections[catId].filter(o => o.id !== optionId);
+        if (g.selections[catId].length === 0) delete g.selections[catId];
+      }
+      app.saveSelections();
     },
 
     onShareAppMessage() {

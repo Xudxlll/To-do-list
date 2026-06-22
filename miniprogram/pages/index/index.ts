@@ -12,18 +12,41 @@ import {
   deleteSharedOption,
   listOptionCatalogRecords,
   readOptionCatalogCache,
+  saveSharedGroupOrders,
   updateSharedOption,
 } from '../../services/customOptions';
 import { OptionCatalogRecord, OptionSearchResult, OptionValidationCode } from '../../types/options';
 import { buildCatalog, reconcileSelections, searchCatalog } from '../../utils/optionCatalog';
 import { collapseAllGroups, CollapsedGroupMap, isGroupCollapsed, toggleGroup } from '../../utils/optionManagement';
-import { readOptionOrder } from '../../utils/optionOrder';
+import { moveOptionAcrossGroups, readOptionOrder } from '../../utils/optionOrder';
 
 type GroupViewModel = OptionGroup & { collapsed: boolean };
 type EditorMode = 'create' | 'edit';
+type DragTarget = {
+  groupId: string;
+  index: number;
+};
+type DragGroupRect = {
+  groupId: string;
+  top: number;
+  bottom: number;
+};
+type DragItemRect = {
+  groupId: string;
+  optionId: string;
+  top: number;
+  bottom: number;
+};
 
 const COLLAPSED_STORAGE_KEY = 'categoryCollapsedGroups:v1';
+const DRAG_AUTO_EXPAND_DELAY = 500;
 const INITIAL_CATEGORIES = buildCatalog([], readOptionOrder());
+let preDragGroupsSnapshot: GroupViewModel[] | null = null;
+let preDragCollapsedGroupsSnapshot: CollapsedGroupMap | null = null;
+let dragGroupRects: DragGroupRect[] = [];
+let dragItemRects: DragItemRect[] = [];
+let dragAutoExpandTimer: ReturnType<typeof setTimeout> | null = null;
+let dragAutoExpandGroupId = '';
 
 const app = getApp<{
   globalData: {
@@ -103,6 +126,134 @@ function buildCurrentGroups(
   }));
 }
 
+function cloneGroupViewModels(groups: GroupViewModel[]): GroupViewModel[] {
+  return groups.map(group => ({
+    ...group,
+    options: cloneOptions(group.options),
+    collapsed: Boolean(group.collapsed),
+  }));
+}
+
+function groupViewModelsToOptionGroups(groups: GroupViewModel[]): OptionGroup[] {
+  return groups.map(group => ({
+    id: group.id,
+    title: group.title,
+    options: cloneOptions(group.options),
+  }));
+}
+
+function applyCollapsedStateToGroups(
+  groups: OptionGroup[],
+  categoryId: string,
+  collapsedGroups: CollapsedGroupMap,
+  fallbackGroups: GroupViewModel[]
+): GroupViewModel[] {
+  return groups.map(group => ({
+    ...group,
+    options: cloneOptions(group.options),
+    collapsed: fallbackGroups.find(item => item.id === group.id)?.collapsed ?? isGroupCollapsed(categoryId, group.id, collapsedGroups),
+  }));
+}
+
+function replaceCategoryGroups(
+  categories: Category[],
+  categoryId: string,
+  groups: GroupViewModel[]
+): Category[] {
+  return categories.map(category => {
+    if (category.id !== categoryId) return category;
+    const optionGroups = groupViewModelsToOptionGroups(groups);
+    return {
+      ...category,
+      optionGroups,
+      options: optionGroups.flatMap(group => group.options),
+    };
+  });
+}
+
+function buildSharedGroupOrdersInput(
+  groups: OptionGroup[],
+  affectedGroupIds?: string[]
+): Array<{ groupId: string; optionIds: string[] }> {
+  const affected = affectedGroupIds && affectedGroupIds.length > 0 ? new Set(affectedGroupIds) : null;
+  return groups
+    .filter(group => !affected || affected.has(group.id))
+    .map(group => ({
+      groupId: group.id,
+      optionIds: group.options.map(option => option.id),
+    }));
+}
+
+function findOptionLocation(groups: GroupViewModel[], optionId: string): { groupId: string; index: number } | null {
+  for (const group of groups) {
+    const index = group.options.findIndex(option => option.id === optionId);
+    if (index >= 0) {
+      return {
+        groupId: group.id,
+        index,
+      };
+    }
+  }
+  return null;
+}
+
+function clearDragAutoExpandTimer() {
+  if (dragAutoExpandTimer) {
+    clearTimeout(dragAutoExpandTimer);
+  }
+  dragAutoExpandTimer = null;
+  dragAutoExpandGroupId = '';
+}
+
+function clearDragRuntimeState() {
+  clearDragAutoExpandTimer();
+  preDragGroupsSnapshot = null;
+  preDragCollapsedGroupsSnapshot = null;
+  dragGroupRects = [];
+  dragItemRects = [];
+}
+
+function readTouchY(e: WechatMiniprogram.TouchEvent): number | null {
+  const touch = e.touches?.[0] || e.changedTouches?.[0];
+  if (!touch) return null;
+  if (typeof touch.clientY === 'number' && Number.isFinite(touch.clientY)) {
+    return touch.clientY;
+  }
+  if (typeof touch.pageY === 'number' && Number.isFinite(touch.pageY)) {
+    return touch.pageY;
+  }
+  return null;
+}
+
+function resolveDragTarget(
+  y: number,
+  draggingOptionId: string,
+  groupRects: DragGroupRect[],
+  itemRects: DragItemRect[]
+): DragTarget | null {
+  const targetGroup = groupRects.find(group => y >= group.top && y <= group.bottom);
+  if (!targetGroup) return null;
+
+  const visibleItems = itemRects
+    .filter(item => item.groupId === targetGroup.groupId && item.optionId !== draggingOptionId)
+    .sort((left, right) => left.top - right.top);
+
+  let targetIndex = visibleItems.length;
+  for (let index = 0; index < visibleItems.length; index += 1) {
+    const item = visibleItems[index];
+    const midpoint = (item.top + item.bottom) / 2;
+    if (y <= midpoint) {
+      targetIndex = index;
+      break;
+    }
+  }
+
+  return {
+    groupId: targetGroup.groupId,
+    index: targetIndex,
+  };
+}
+
 function readCollapsedGroups(): CollapsedGroupMap {
   try {
     const value = wx.getStorageSync(COLLAPSED_STORAGE_KEY);
@@ -175,6 +326,13 @@ Component({
     editorSaving: false,
     scrollIntoView: '',
     returnToPartnerWelcome: false,
+    draggingOptionId: '',
+    dragSourceGroupId: '',
+    dragTargetGroupId: '',
+    dragTargetIndex: -1,
+    dragY: 0,
+    dragGhostName: '',
+    dragSaving: false,
   },
 
   lifetimes: {
@@ -184,6 +342,9 @@ Component({
     },
     ready() {
       void this.loadOptionCatalog();
+    },
+    detached() {
+      clearDragRuntimeState();
     },
   },
 
@@ -294,6 +455,156 @@ Component({
       });
     },
 
+    isDragBusy() {
+      return Boolean(this.data.draggingOptionId) || this.data.dragSaving;
+    },
+
+    clearDragState(nextState: Record<string, unknown> = {}) {
+      clearDragRuntimeState();
+      this.setData({
+        draggingOptionId: '',
+        dragSourceGroupId: '',
+        dragTargetGroupId: '',
+        dragTargetIndex: -1,
+        dragY: 0,
+        dragGhostName: '',
+        dragSaving: false,
+        ...nextState,
+      });
+    },
+
+    applyCurrentCategoryGroups(groups: GroupViewModel[]) {
+      const nextGroups = cloneGroupViewModels(groups);
+      const categories = replaceCategoryGroups(this.data.categories, this.data.currentCategoryId, nextGroups);
+      const currentCategory = categories.find(category => category.id === this.data.currentCategoryId) || this.data.currentCategory;
+      this.setData({
+        categories,
+        currentCategory,
+        currentOptionGroups: nextGroups,
+        allGroupsCollapsed: nextGroups.length > 0 && nextGroups.every(group => group.collapsed),
+      });
+    },
+
+    restorePreDragGroups() {
+      if (!preDragGroupsSnapshot) return;
+      this.applyCurrentCategoryGroups(preDragGroupsSnapshot);
+    },
+
+    restorePreDragSnapshots() {
+      if (!preDragGroupsSnapshot || !preDragCollapsedGroupsSnapshot) return;
+      const nextCollapsedGroups = { ...preDragCollapsedGroupsSnapshot };
+      saveCollapsedGroups(nextCollapsedGroups);
+      this.applyCurrentCategoryGroups(preDragGroupsSnapshot);
+      this.setData({
+        collapsedGroups: nextCollapsedGroups,
+      });
+    },
+
+    measureDragLayouts(): Promise<boolean> {
+      return new Promise(resolve => {
+        let groupRectsResult: DragGroupRect[] = [];
+        let itemRectsResult: DragItemRect[] = [];
+        const query = wx.createSelectorQuery().in(this);
+        query
+          .selectAll('.option-group-dropzone')
+          .fields({ rect: true, dataset: true }, res => {
+            const nodes = Array.isArray(res) ? res : [];
+            groupRectsResult = (nodes || [])
+              .map((node: any) => ({
+                groupId: typeof node.dataset?.groupId === 'string' ? node.dataset.groupId : '',
+                top: typeof node.top === 'number' ? node.top : Number.NaN,
+                bottom: typeof node.bottom === 'number' ? node.bottom : Number.NaN,
+              }))
+              .filter((node: DragGroupRect) => node.groupId !== '' && Number.isFinite(node.top) && Number.isFinite(node.bottom));
+          });
+        query
+          .selectAll('.option-item')
+          .fields({ rect: true, dataset: true }, res => {
+            const nodes = Array.isArray(res) ? res : [];
+            itemRectsResult = (nodes || [])
+              .map((node: any) => ({
+                groupId: typeof node.dataset?.groupId === 'string' ? node.dataset.groupId : '',
+                optionId: typeof node.dataset?.optionId === 'string' ? node.dataset.optionId : '',
+                top: typeof node.top === 'number' ? node.top : Number.NaN,
+                bottom: typeof node.bottom === 'number' ? node.bottom : Number.NaN,
+              }))
+              .filter((node: DragItemRect) => node.groupId !== '' && node.optionId !== '' && Number.isFinite(node.top) && Number.isFinite(node.bottom));
+          });
+        query.exec(() => {
+          dragGroupRects = groupRectsResult;
+          dragItemRects = itemRectsResult;
+          resolve(groupRectsResult.length > 0 && itemRectsResult.length > 0);
+        });
+      });
+    },
+
+    scheduleAutoExpand(groupId: string) {
+      if (!groupId || dragAutoExpandGroupId === groupId) return;
+      clearDragAutoExpandTimer();
+      dragAutoExpandGroupId = groupId;
+      dragAutoExpandTimer = setTimeout(async () => {
+        if (this.data.draggingOptionId === '' || dragAutoExpandGroupId !== groupId) return;
+        const nextCollapsedGroups = { ...this.data.collapsedGroups };
+        delete nextCollapsedGroups[`${this.data.currentCategoryId}:${groupId}`];
+        saveCollapsedGroups(nextCollapsedGroups);
+        this.renderCatalog(this.data.catalogRecords, {
+          categoryId: this.data.currentCategoryId,
+          collapsedGroups: nextCollapsedGroups,
+          searchQuery: this.data.searchQuery,
+        });
+        const measured = await this.measureDragLayouts();
+        if (!measured) {
+          this.restorePreDragSnapshots();
+          this.clearDragState();
+          wx.showToast({
+            title: '拖拽初始化失败，请重试',
+            icon: 'none',
+          });
+          return;
+        }
+        this.updateDragTargetByY(this.data.dragY);
+      }, DRAG_AUTO_EXPAND_DELAY);
+    },
+
+    updateDragTargetByY(y: number) {
+      if (!this.data.draggingOptionId) return;
+      const nextTarget = resolveDragTarget(y, this.data.draggingOptionId, dragGroupRects, dragItemRects);
+      if (!nextTarget) {
+        clearDragAutoExpandTimer();
+        if (
+          this.data.dragY !== y ||
+          this.data.dragTargetGroupId !== '' ||
+          this.data.dragTargetIndex !== -1
+        ) {
+          this.setData({
+            dragY: y,
+            dragTargetGroupId: '',
+            dragTargetIndex: -1,
+          });
+        }
+        return;
+      }
+
+      const targetGroup = this.data.currentOptionGroups.find(group => group.id === nextTarget.groupId);
+      if (targetGroup?.collapsed && nextTarget.groupId !== this.data.dragSourceGroupId) {
+        this.scheduleAutoExpand(nextTarget.groupId);
+      } else if (dragAutoExpandGroupId && dragAutoExpandGroupId !== nextTarget.groupId) {
+        clearDragAutoExpandTimer();
+      }
+
+      if (
+        this.data.dragY !== y ||
+        this.data.dragTargetGroupId !== nextTarget.groupId ||
+        this.data.dragTargetIndex !== nextTarget.index
+      ) {
+        this.setData({
+          dragY: y,
+          dragTargetGroupId: nextTarget.groupId,
+          dragTargetIndex: nextTarget.index,
+        });
+      }
+    },
+
     onNavBack() {
       if (this.data.returnToPartnerWelcome) {
         if (getCurrentPages().length > 2) {
@@ -312,6 +623,7 @@ Component({
     },
 
     selectCategory(categoryId: string) {
+      if (this.isDragBusy()) return;
       if (categoryId === this.data.currentCategoryId) return;
       this.renderCatalog(this.data.catalogRecords, {
         categoryId,
@@ -328,6 +640,7 @@ Component({
     },
 
     toggleManagementMode() {
+      if (this.isDragBusy()) return;
       this.setData({
         manageMode: !this.data.manageMode,
         scrollIntoView: '',
@@ -335,6 +648,7 @@ Component({
     },
 
     toggleOptionGroup(e: WechatMiniprogram.TouchEvent) {
+      if (this.isDragBusy()) return;
       const groupId = e.currentTarget.dataset.groupId as string;
       if (!groupId) return;
       const nextCollapsedGroups = toggleGroup(this.data.currentCategoryId, groupId, this.data.collapsedGroups);
@@ -347,6 +661,7 @@ Component({
     },
 
     collapseAllOptionGroups() {
+      if (this.isDragBusy()) return;
       const categoryId = this.data.currentCategoryId;
       const currentGroups = this.data.currentOptionGroups.map(group => ({
         id: group.id,
@@ -373,7 +688,7 @@ Component({
     },
 
     onToggleOption(e: WechatMiniprogram.TouchEvent) {
-      if (this.data.manageMode) return;
+      if (this.data.manageMode || this.isDragBusy()) return;
       const option = e.currentTarget.dataset.option as Option;
       if (!option) return;
 
@@ -404,6 +719,7 @@ Component({
     },
 
     onSearchInput(e: WechatMiniprogram.Input) {
+      if (this.isDragBusy()) return;
       const searchQuery = e.detail.value || '';
       this.renderCatalog(this.data.catalogRecords, {
         categoryId: this.data.currentCategoryId,
@@ -414,6 +730,7 @@ Component({
     },
 
     onSearchResultTap(e: WechatMiniprogram.TouchEvent) {
+      if (this.isDragBusy()) return;
       const result = e.currentTarget.dataset.result as OptionSearchResult;
       if (!result) return;
 
@@ -465,7 +782,181 @@ Component({
       });
     },
 
+    async onOptionDragStart(e: WechatMiniprogram.TouchEvent) {
+      if (!this.data.manageMode || this.data.draggingOptionId || this.data.dragSaving || this.data.editorSaving || this.data.editorVisible) return;
+      const option = e.currentTarget.dataset.option as Option | undefined;
+      const groupId = e.currentTarget.dataset.groupId as string;
+      if (!option || !groupId) return;
+
+      const sourceGroup = this.data.currentOptionGroups.find(group => group.id === groupId);
+      const sourceOption = sourceGroup?.options.find(item => item.id === option.id);
+      if (!sourceGroup || !sourceOption) return;
+
+      preDragGroupsSnapshot = cloneGroupViewModels(this.data.currentOptionGroups);
+      preDragCollapsedGroupsSnapshot = { ...this.data.collapsedGroups };
+      const dragY = readTouchY(e) ?? 0;
+      this.setData({
+        draggingOptionId: option.id,
+        dragSourceGroupId: groupId,
+        dragTargetGroupId: '',
+        dragTargetIndex: -1,
+        dragY,
+        dragGhostName: sourceOption.name,
+      });
+
+      const measured = await this.measureDragLayouts();
+      if (!measured) {
+        this.clearDragState();
+        wx.showToast({
+          title: '拖拽初始化失败，请重试',
+          icon: 'none',
+        });
+      }
+    },
+
+    onOptionDragMove(e: WechatMiniprogram.TouchEvent) {
+      if (!this.data.draggingOptionId || this.data.dragSaving) return;
+      const y = readTouchY(e);
+      if (y === null) return;
+      this.updateDragTargetByY(y);
+    },
+
+    async onOptionDragEnd(e?: WechatMiniprogram.TouchEvent) {
+      if (!this.data.draggingOptionId || this.data.dragSaving || !preDragGroupsSnapshot) {
+        if (!this.data.dragSaving) {
+          this.clearDragState();
+        }
+        return;
+      }
+      const endY = e ? readTouchY(e) : null;
+      if (endY !== null) {
+        this.updateDragTargetByY(endY);
+      }
+
+      const sourceLocation = findOptionLocation(preDragGroupsSnapshot, this.data.draggingOptionId);
+      const hasValidTarget = this.data.dragTargetGroupId && this.data.dragTargetIndex >= 0;
+      if (!sourceLocation || !hasValidTarget) {
+        this.restorePreDragSnapshots();
+        this.clearDragState();
+        return;
+      }
+
+      if (
+        sourceLocation.groupId === this.data.dragTargetGroupId &&
+        sourceLocation.index === this.data.dragTargetIndex
+      ) {
+        this.restorePreDragSnapshots();
+        this.clearDragState();
+        return;
+      }
+
+      const targetGroupId = this.data.dragTargetGroupId;
+      const targetIndex = this.data.dragTargetIndex;
+
+      const moveResult = moveOptionAcrossGroups(
+        groupViewModelsToOptionGroups(preDragGroupsSnapshot),
+        this.data.draggingOptionId,
+        targetGroupId,
+        targetIndex
+      );
+      if (!moveResult.moved || !moveResult.source || !moveResult.target) {
+        this.restorePreDragSnapshots();
+        this.clearDragState();
+        return;
+      }
+      const affectedGroupIds = sourceLocation.groupId === targetGroupId
+        ? [sourceLocation.groupId]
+        : [sourceLocation.groupId, targetGroupId];
+
+      const previewGroups = applyCollapsedStateToGroups(
+        moveResult.groups,
+        this.data.currentCategoryId,
+        this.data.collapsedGroups,
+        this.data.currentOptionGroups
+      );
+      this.applyCurrentCategoryGroups(previewGroups);
+      clearDragAutoExpandTimer();
+      this.setData({
+        draggingOptionId: '',
+        dragSourceGroupId: '',
+        dragTargetGroupId: '',
+        dragTargetIndex: -1,
+        dragY: 0,
+        dragGhostName: '',
+        dragSaving: true,
+      });
+
+      const movedOption = moveResult.moved;
+      const movedOrders = buildSharedGroupOrdersInput(moveResult.groups, affectedGroupIds);
+      const preDragOrderGroups = buildSharedGroupOrdersInput(groupViewModelsToOptionGroups(preDragGroupsSnapshot), affectedGroupIds);
+
+      try {
+        if (sourceLocation.groupId !== targetGroupId) {
+          await updateSharedOption(movedOption, {
+            categoryId: this.data.currentCategoryId,
+            groupId: targetGroupId,
+            name: movedOption.name,
+            description: movedOption.description || '',
+          }, this.data.categories);
+        }
+
+        await saveSharedGroupOrders(this.data.currentCategoryId, movedOrders);
+        this.renderCatalog(readOptionCatalogCache(), {
+          categoryId: this.data.currentCategoryId,
+          collapsedGroups: this.data.collapsedGroups,
+          searchQuery: this.data.searchQuery,
+        });
+        this.clearDragState();
+        wx.showToast({
+          title: '已调整顺序',
+          icon: 'success',
+        });
+      } catch (error) {
+        console.warn('拖拽排序保存失败', error);
+
+        if (sourceLocation.groupId !== targetGroupId) {
+          try {
+            const originalOption = findOptionById(this.data.categories, movedOption.id) || movedOption;
+            await updateSharedOption(originalOption, {
+              categoryId: this.data.currentCategoryId,
+              groupId: sourceLocation.groupId,
+              name: movedOption.name,
+              description: movedOption.description || '',
+            }, this.data.categories);
+            await saveSharedGroupOrders(this.data.currentCategoryId, preDragOrderGroups);
+            this.renderCatalog(readOptionCatalogCache(), {
+              categoryId: this.data.currentCategoryId,
+              collapsedGroups: this.data.collapsedGroups,
+              searchQuery: this.data.searchQuery,
+            });
+          } catch (rollbackError) {
+            console.warn('拖拽排序回滚失败', rollbackError);
+            this.restorePreDragSnapshots();
+          }
+        } else {
+          try {
+            await saveSharedGroupOrders(this.data.currentCategoryId, preDragOrderGroups);
+          } catch (rollbackError) {
+            console.warn('拖拽排序回滚失败', rollbackError);
+          }
+        }
+
+        this.restorePreDragSnapshots();
+        this.clearDragState();
+        wx.showToast({
+          title: '排序保存失败，请重试',
+          icon: 'none',
+        });
+      }
+    },
+
+    onOptionDragCancel() {
+      this.restorePreDragSnapshots();
+      this.clearDragState();
+    },
+
     openOptionEditor(e: WechatMiniprogram.TouchEvent) {
+      if (this.isDragBusy()) return;
       const categoryId = (e.currentTarget.dataset.categoryId as string) || this.data.currentCategoryId;
       const groupId = e.currentTarget.dataset.groupId as string;
       const option = e.currentTarget.dataset.option as Option | undefined;
@@ -490,7 +981,7 @@ Component({
     },
 
     closeOptionEditor(force = false) {
-      if (this.data.editorSaving && !force) return;
+      if ((this.data.editorSaving || this.isDragBusy()) && !force) return;
       this.setData({
         editorVisible: false,
         editorMode: 'create',
@@ -517,7 +1008,7 @@ Component({
     },
 
     async saveOptionEditor() {
-      if (this.data.editorSaving) return;
+      if (this.data.editorSaving || this.isDragBusy()) return;
       const wasEdit = this.data.editorMode === 'edit';
 
       const input = {
@@ -568,6 +1059,7 @@ Component({
     },
 
     onDeleteOption(e: WechatMiniprogram.TouchEvent) {
+      if (this.isDragBusy()) return;
       const option = e.currentTarget.dataset.option as Option;
       const categoryId = (e.currentTarget.dataset.categoryId as string) || this.data.currentCategoryId;
       if (!option || !categoryId) return;

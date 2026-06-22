@@ -5,7 +5,7 @@
     <view
       wx:for="{{categories}}"
       wx:key="id"
-      class="sidebar-item {{currentCategoryId === item.id ? 'active' : ''}}"
+      class="sidebar-item {{currentCategoryId === item.id ? 'active' : ''}} {{draggingOptionId || dragSaving ? 'disabled' : ''}}"
       bind:tap="onSelectCategory"
       data-id="{{item.id}}"
     >
@@ -17,15 +17,20 @@
 
   <scroll-view
     class="right-content"
-    scroll-y
+    scroll-y="{{!draggingOptionId && !dragSaving}}"
     type="list"
     enhanced
     show-scrollbar="{{false}}"
     scroll-into-view="{{scrollIntoView}}"
+    catch:touchmove="onOptionDragMove"
+    catch:touchend="onOptionDragEnd"
+    catch:touchcancel="onOptionDragCancel"
   >
     <view class="content-header">
       <text class="content-title">{{currentCategory.icon}} {{currentCategory.name}}</text>
     </view>
+
+    <view wx:if="{{dragSaving}}" class="drag-saving">保存顺序中...</view>
 
     <view class="content-toolbar">
       <view class="search-bar">
@@ -36,14 +41,15 @@
           placeholder="搜活动或补充说明"
           bind:input="onSearchInput"
           confirm-type="search"
+          disabled="{{draggingOptionId || dragSaving}}"
         />
       </view>
       <view class="toolbar-actions">
-        <view class="toolbar-btn" bind:tap="collapseAllOptionGroups">
+        <view class="toolbar-btn {{draggingOptionId || dragSaving ? 'disabled' : ''}}" bind:tap="collapseAllOptionGroups">
           <text class="toolbar-btn-icon">{{allGroupsCollapsed ? '▾' : '▴'}}</text>
           <text>{{allGroupsCollapsed ? '全部展开' : '全部收起'}}</text>
         </view>
-        <view class="toolbar-btn {{manageMode ? 'active' : ''}}" bind:tap="toggleManagementMode">
+        <view class="toolbar-btn {{manageMode ? 'active' : ''}} {{draggingOptionId || dragSaving ? 'disabled' : ''}}" bind:tap="toggleManagementMode">
           {{manageMode ? '完成' : '管理'}}
         </view>
       </view>
@@ -67,7 +73,13 @@
     </view>
 
     <block wx:else>
-      <view wx:for="{{currentOptionGroups}}" wx:key="id" wx:for-item="group" class="option-group">
+      <view
+        wx:for="{{currentOptionGroups}}"
+        wx:key="id"
+        wx:for-item="group"
+        class="option-group option-group-dropzone {{dragTargetGroupId === group.id ? 'drag-target' : ''}}"
+        data-group-id="{{group.id}}"
+      >
         <view class="group-header" bind:tap="toggleOptionGroup" data-group-id="{{group.id}}">
           <view class="group-header-main">
             <text class="group-chevron">{{group.collapsed ? '▸' : '▾'}}</text>
@@ -84,23 +96,36 @@
         </view>
 
         <view wx:if="{{!group.collapsed}}">
+          <view wx:if="{{group.options.length === 0}}" class="option-empty">暂无活动</view>
           <view
             wx:for="{{group.options}}"
             wx:key="id"
             wx:for-item="item"
-            class="option-item {{selectedIds[item.id] ? 'selected' : ''}} {{manageMode ? 'management' : ''}}"
+            class="option-item {{selectedIds[item.id] ? 'selected' : ''}} {{manageMode ? 'management' : ''}} {{draggingOptionId === item.id ? 'drag-placeholder' : ''}}"
             id="option-{{item.id}}"
             bind:tap="onToggleOption"
             data-option="{{item}}"
+            data-option-id="{{item.id}}"
+            data-group-id="{{group.id}}"
           >
             <view wx:if="{{!manageMode}}" class="option-checkbox">
               <view wx:if="{{selectedIds[item.id]}}" class="checkbox-checked">✓</view>
             </view>
             <view class="option-text">
               <text class="option-name">{{item.name}}</text>
-              <text wx:if="{{item.description}}" class="option-desc">{{item.description}}</text>
+              <text wx:if="{{item.description && draggingOptionId !== item.id}}" class="option-desc">{{item.description}}</text>
+              <text wx:if="{{draggingOptionId === item.id}}" class="drag-placeholder-label">拖动到目标分组</text>
             </view>
             <view wx:if="{{manageMode}}" class="management-actions">
+              <view
+                class="drag-handle"
+                catch:longpress="onOptionDragStart"
+                data-option="{{item}}"
+                data-group-id="{{group.id}}"
+                aria-label="拖拽排序"
+              >
+                ☰
+              </view>
               <view
                 class="management-action"
                 catch:tap="openOptionEditor"
@@ -123,6 +148,10 @@
         </view>
       </view>
     </block>
+
+    <view wx:if="{{draggingOptionId}}" class="drag-ghost" style="top: {{dragY}}px;">
+      <text class="drag-ghost-name">{{dragGhostName}}</text>
+    </view>
 
     <view style="height: 24rpx;"></view>
   </scroll-view>

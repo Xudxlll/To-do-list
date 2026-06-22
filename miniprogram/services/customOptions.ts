@@ -145,10 +145,11 @@ function normalizeGroupOrderRecord(raw: unknown): GroupOrderRecord | null {
 
   const categoryId = trimText(raw.categoryId);
   const groupId = trimText(raw.groupId);
-  const optionIds = Array.isArray(raw.optionIds)
-    ? Array.from(new Set(raw.optionIds.map(trimText).filter(Boolean)))
-    : [];
-  if (!categoryId || !groupId || !optionIds.length || !isFixedGroup(categoryId, groupId)) {
+  if (!Array.isArray(raw.optionIds)) {
+    return null;
+  }
+  const optionIds = Array.from(new Set(raw.optionIds.map(trimText).filter(Boolean)));
+  if (!categoryId || !groupId || !isFixedGroup(categoryId, groupId)) {
     return null;
   }
 
@@ -482,9 +483,6 @@ export async function saveSharedGroupOrders(
     const optionIds = Array.isArray(group.optionIds)
       ? Array.from(new Set(group.optionIds.map(trimText).filter(Boolean)))
       : [];
-    if (!optionIds.length) {
-      throw createServiceError('group', `共享标签顺序保存失败：${groupId} 选项列表为空`);
-    }
 
     return {
       _id: buildOrderDocId(normalizedCategoryId, groupId),

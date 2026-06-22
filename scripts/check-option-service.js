@@ -792,6 +792,19 @@ async function main() {
   assert.equal(getCollection(orderDb).docs.get(buildOrderDocId('eat', 'grill')).optionIds[1], 'option_21', '顺序记录应完整保存 optionIds');
   assert.equal(service.readOptionCatalogCache().some(record => record.recordType === 'group_order'), true, '保存顺序后应该刷新缓存');
 
+  const emptySourceOrder = await service.saveSharedGroupOrders('eat', [
+    { groupId: 'cuisine', optionIds: [] },
+    { groupId: 'grill', optionIds: ['option_12', 'option_11'] },
+  ], orderDb);
+  assert.equal(emptySourceOrder.length, 2, '移空源分组时仍应保存两个受影响分组顺序');
+  assert.deepEqual(getCollection(orderDb).docs.get(buildOrderDocId('eat', 'cuisine')).optionIds, [], '源分组被移空时应保存空顺序');
+  const cachedEmptyOrder = service.readOptionCatalogCache()
+    .find(record => record.recordType === 'group_order' && record.categoryId === 'eat' && record.groupId === 'cuisine');
+  assert.deepEqual(cachedEmptyOrder.optionIds, [], '源分组空顺序应保留在本地目录缓存里');
+  const reloadedEmptyOrder = (await service.listOptionCatalogRecords(orderDb))
+    .find(record => record.recordType === 'group_order' && record.categoryId === 'eat' && record.groupId === 'cuisine');
+  assert.deepEqual(reloadedEmptyOrder.optionIds, [], '源分组空顺序重新从云端读取时不应被归一化丢弃');
+
   let fixedOrderFailed = false;
   try {
     await service.saveSharedGroupOrders('eat', [

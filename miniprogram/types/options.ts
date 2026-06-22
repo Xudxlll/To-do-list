@@ -1,3 +1,5 @@
+import type { Option } from '../data/categories';
+
 export interface LegacyCustomOptionRecord {
   _id?: string;
   categoryId: string;
@@ -37,4 +39,33 @@ export interface SharedOptionInput {
   groupId: string;
   name: string;
   description?: string;
+}
+
+export type OptionValidationCode =
+  | 'ok'
+  | 'empty'
+  | 'too_long'
+  | 'description_too_long'
+  | 'category'
+  | 'group'
+  | 'duplicate';
+
+export interface OptionValidationResult {
+  ok: boolean;
+  code: OptionValidationCode;
+}
+
+export interface OptionValidationInput {
+  categoryId: string;
+  groupId: string;
+  name: string;
+  description?: string;
+}
+
+export interface OptionSearchResult {
+  categoryId: string;
+  categoryName: string;
+  groupId: string;
+  groupName: string;
+  option: Option;
 }

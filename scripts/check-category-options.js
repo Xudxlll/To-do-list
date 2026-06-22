@@ -20,8 +20,9 @@ function assert(condition, message) {
 }
 
 const { mergeCustomOptions } = require('../miniprogram/utils/categoryOptions.ts');
+const { buildCatalog } = require('../miniprogram/utils/optionCatalog.ts');
 
-const categories = mergeCustomOptions([
+const records = [
   {
     _id: 'custom_eat_test',
     categoryId: 'eat',
@@ -29,13 +30,18 @@ const categories = mergeCustomOptions([
     normalizedName: '芝士焗饭',
     createdAt: Date.now(),
   },
-]);
+];
 
-const eat = categories.find(category => category.id === 'eat');
-const otherGroup = eat && eat.optionGroups.find(group => group.id === 'other');
-const option = otherGroup && otherGroup.options.find(item => item.name === '芝士焗饭');
+function assertMergedOption(categories, sourceName) {
+  const eat = categories.find(category => category.id === 'eat');
+  const otherGroup = eat && eat.optionGroups.find(group => group.id === 'other');
+  const option = otherGroup && otherGroup.options.find(item => item.name === '芝士焗饭');
 
-assert(option, '云端自定义标签应该进入对应大类的其他分组');
-assert(option.canDelete === true, '云端自定义标签应该可以删除');
+  assert(option, `${sourceName} 应该把云端自定义标签合并到对应大类的其他分组`);
+  assert(option.canDelete === true, `${sourceName} 合并的云端自定义标签应该可以删除`);
+}
+
+assertMergedOption(mergeCustomOptions(records), 'mergeCustomOptions');
+assertMergedOption(buildCatalog(records), 'buildCatalog');
 
 console.log('category option checks passed');

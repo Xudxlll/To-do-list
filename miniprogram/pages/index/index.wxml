@@ -15,74 +15,160 @@
     </view>
   </scroll-view>
 
-  <scroll-view class="right-content" scroll-y type="list" enhanced show-scrollbar="{{false}}">
+  <scroll-view
+    class="right-content"
+    scroll-y
+    type="list"
+    enhanced
+    show-scrollbar="{{false}}"
+    scroll-into-view="{{scrollIntoView}}"
+  >
     <view class="content-header">
       <text class="content-title">{{currentCategory.icon}} {{currentCategory.name}}</text>
-      <view class="sort-toggle {{sortMode ? 'active' : ''}}" bind:tap="toggleSortMode">{{sortMode ? '完成' : '排序'}}</view>
     </view>
 
-    <view wx:for="{{currentOptionGroups}}" wx:key="id" wx:for-item="group" class="option-group">
-      <view class="group-title">{{group.title}}</view>
-      <view
-        wx:for="{{group.options}}"
-        wx:key="id"
-        wx:for-item="item"
-        wx:for-index="optionIndex"
-        class="option-item {{selectedIds[item.id] ? 'selected' : ''}}"
-        bind:tap="onToggleOption"
-        data-option="{{item}}"
-      >
-        <view class="option-checkbox">
-          <view wx:if="{{selectedIds[item.id]}}" class="checkbox-checked">✓</view>
+    <view class="content-toolbar">
+      <view class="search-bar">
+        <text class="search-icon">⌕</text>
+        <input
+          class="search-input"
+          value="{{searchQuery}}"
+          placeholder="搜活动或补充说明"
+          bind:input="onSearchInput"
+          confirm-type="search"
+        />
+      </view>
+      <view class="toolbar-actions">
+        <view class="toolbar-btn" bind:tap="collapseAllOptionGroups">
+          <text class="toolbar-btn-icon">{{allGroupsCollapsed ? '▾' : '▴'}}</text>
+          <text>{{allGroupsCollapsed ? '全部展开' : '全部收起'}}</text>
         </view>
-        <view class="option-text">
-          <text class="option-name">{{item.name}}</text>
-          <text wx:if="{{item.description}}" class="option-desc">{{item.description}}</text>
+        <view class="toolbar-btn {{manageMode ? 'active' : ''}}" bind:tap="toggleManagementMode">
+          {{manageMode ? '完成' : '管理'}}
         </view>
-        <view wx:if="{{sortMode}}" class="sort-actions">
-          <view class="sort-btn {{optionIndex === 0 ? 'disabled' : ''}}" catch:tap="onMoveOption" data-group-id="{{group.id}}" data-option-id="{{item.id}}" data-direction="up">↑</view>
-          <view class="sort-btn {{optionIndex === group.options.length - 1 ? 'disabled' : ''}}" catch:tap="onMoveOption" data-group-id="{{group.id}}" data-option-id="{{item.id}}" data-direction="down">↓</view>
-        </view>
-        <view wx:if="{{item.canDelete}}" class="del-btn" catch:tap="onDeleteCloudCustom" data-option="{{item}}">✕</view>
       </view>
     </view>
 
-    <view wx:if="{{currentCustomOptions.length > 0}}" class="custom-section">
-      <view class="custom-label">自定义</view>
+    <view wx:if="{{searchQuery}}" class="search-results">
+      <view wx:if="{{searchResults.length === 0}}" class="search-empty">没有找到相关活动</view>
       <view
-        wx:for="{{currentCustomOptions}}"
-        wx:key="id"
-        class="option-item custom-option {{selectedIds[item.id] ? 'selected' : ''}}"
-        bind:tap="onToggleOption"
-        data-option="{{item}}"
+        wx:for="{{searchResults}}"
+        wx:key="option.id"
+        class="search-result-item"
+        bind:tap="onSearchResultTap"
+        data-result="{{item}}"
       >
-        <view class="option-checkbox">
-          <view wx:if="{{selectedIds[item.id]}}" class="checkbox-checked">✓</view>
+        <view class="search-result-main">
+          <text class="option-name">{{item.option.name}}</text>
+          <text wx:if="{{item.option.description}}" class="option-desc">{{item.option.description}}</text>
         </view>
-        <view class="option-text">
-          <text class="option-name">{{item.name}}</text>
-        </view>
-        <view class="del-btn" catch:tap="onDeleteCustom" data-id="{{item.id}}">✕</view>
+        <text class="search-result-meta">{{item.categoryName}} · {{item.groupName}}</text>
       </view>
     </view>
 
-    <view class="custom-input-row">
-      <input
-        class="custom-input"
-        value="{{inputValue}}"
-        placeholder="✏️ 输入自定义选项..."
-        bind:input="onCustomInput"
-        bind:confirm="onAddCustom"
-        confirm-type="done"
-      />
-      <button class="add-btn {{!inputValue ? 'btn-disabled' : ''}}" disabled="{{!inputValue}}" bind:tap="onAddCustom">添加</button>
-    </view>
+    <block wx:else>
+      <view wx:for="{{currentOptionGroups}}" wx:key="id" wx:for-item="group" class="option-group">
+        <view class="group-header" bind:tap="toggleOptionGroup" data-group-id="{{group.id}}">
+          <view class="group-header-main">
+            <text class="group-chevron">{{group.collapsed ? '▸' : '▾'}}</text>
+            <text class="group-title">{{group.title}}</text>
+          </view>
+          <view
+            class="group-plus"
+            catch:tap="openOptionEditor"
+            data-category-id="{{currentCategoryId}}"
+            data-group-id="{{group.id}}"
+          >
+            ＋
+          </view>
+        </view>
 
-    <view style="height: 20rpx;"></view>
+        <view wx:if="{{!group.collapsed}}">
+          <view
+            wx:for="{{group.options}}"
+            wx:key="id"
+            wx:for-item="item"
+            class="option-item {{selectedIds[item.id] ? 'selected' : ''}} {{manageMode ? 'management' : ''}}"
+            id="option-{{item.id}}"
+            bind:tap="onToggleOption"
+            data-option="{{item}}"
+          >
+            <view wx:if="{{!manageMode}}" class="option-checkbox">
+              <view wx:if="{{selectedIds[item.id]}}" class="checkbox-checked">✓</view>
+            </view>
+            <view class="option-text">
+              <text class="option-name">{{item.name}}</text>
+              <text wx:if="{{item.description}}" class="option-desc">{{item.description}}</text>
+            </view>
+            <view wx:if="{{manageMode}}" class="management-actions">
+              <view
+                class="management-action"
+                catch:tap="openOptionEditor"
+                data-option="{{item}}"
+                data-category-id="{{currentCategoryId}}"
+                data-group-id="{{group.id}}"
+              >
+                ✎
+              </view>
+              <view
+                class="management-action danger"
+                catch:tap="onDeleteOption"
+                data-option="{{item}}"
+                data-category-id="{{currentCategoryId}}"
+              >
+                🗑
+              </view>
+            </view>
+          </view>
+        </view>
+      </view>
+    </block>
+
+    <view style="height: 24rpx;"></view>
   </scroll-view>
 </view>
 
 <view class="bottom-bar">
   <view class="count">已选 <em>{{totalCount}}</em> 项</view>
   <button class="send-btn {{totalCount === 0 ? 'btn-disabled' : ''}}" disabled="{{totalCount === 0}}" open-type="share">发送给 TA 💌</button>
+</view>
+
+<view wx:if="{{editorVisible}}" class="editor-overlay" catch:tap="closeOptionEditor">
+  <view class="editor-modal" catch:tap="noop">
+    <view class="editor-header">
+      <text class="editor-title">{{editorMode === 'edit' ? '编辑活动' : '新增活动'}}</text>
+      <view class="editor-close" bind:tap="closeOptionEditor">✕</view>
+    </view>
+    <text class="editor-meta">{{editorCategoryName}} · {{editorGroupName}}</text>
+
+    <view class="editor-field">
+      <text class="editor-label">名称</text>
+      <input
+        class="editor-input"
+        value="{{editorName}}"
+        maxlength="30"
+        placeholder="最多 30 个字"
+        bind:input="onEditorNameInput"
+      />
+    </view>
+
+    <view class="editor-field">
+      <text class="editor-label">补充说明</text>
+      <textarea
+        class="editor-textarea"
+        value="{{editorDescription}}"
+        maxlength="160"
+        placeholder="最多 160 个字"
+        auto-height
+        bind:input="onEditorDescriptionInput"
+      />
+    </view>
+
+    <view class="editor-actions">
+      <view class="editor-btn secondary" bind:tap="closeOptionEditor">取消</view>
+      <view class="editor-btn primary {{editorSaving ? 'disabled' : ''}}" bind:tap="saveOptionEditor">
+        {{editorSaving ? '保存中...' : '保存'}}
+      </view>
+    </view>
+  </view>
 </view>

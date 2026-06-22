@@ -1,5 +1,6 @@
 export interface Option {
   id: string;
+  groupId: string;
   name: string;
   emoji: string;
   isCustom: boolean;
@@ -22,10 +23,20 @@ export interface OptionGroup {
   options: Option[];
 }
 
+export interface SharedOptionSnapshot {
+  id: string;
+  groupId?: string;
+  name: string;
+  emoji: string;
+  isCustom: boolean;
+  canDelete?: boolean;
+  description?: string;
+}
+
 export interface Selection {
   categoryId: string;
   categoryName: string;
-  options: Option[];
+  options: SharedOptionSnapshot[];
 }
 
 export interface ShareData {
@@ -57,7 +68,7 @@ function opts(categoryId: string, groupId: string, names: OptionInput[]): Option
   return names.map((item, i) => {
     const name = typeof item === 'string' ? item : item.name;
     const description = typeof item === 'string' ? undefined : item.description;
-    return { id: `${categoryId}_${groupId}_${i}`, name, emoji: '', isCustom: false, description };
+    return { id: `${categoryId}_${groupId}_${i}`, groupId, name, emoji: '', isCustom: false, description };
   });
 }
 
@@ -241,9 +252,10 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function isValidOption(value: unknown): value is Option {
+function isValidSharedOption(value: unknown): value is SharedOptionSnapshot {
   if (!isObject(value)) return false;
   return typeof value.id === 'string'
+    && (value.groupId === undefined || typeof value.groupId === 'string')
     && typeof value.name === 'string'
     && typeof value.emoji === 'string'
     && typeof value.isCustom === 'boolean';
@@ -262,8 +274,21 @@ export function validateShareData(value: unknown): value is ShareData {
     return typeof selection.categoryId === 'string'
       && typeof selection.categoryName === 'string'
       && Array.isArray(selection.options)
-      && selection.options.every(isValidOption);
+      && selection.options.every(isValidSharedOption);
   });
+}
+
+export function hydrateSharedOption(categoryId: string, option: SharedOptionSnapshot): Option {
+  const category = getCategoryById(categoryId);
+  const hasFixedGroup = category?.optionGroups.some(group => group.id === option.groupId) || false;
+  const presetOption = hasFixedGroup
+    ? undefined
+    : category?.options.find(item => item.id === option.id)
+      || category?.options.find(item => item.name === option.name);
+  return {
+    ...option,
+    groupId: hasFixedGroup ? option.groupId! : presetOption?.groupId || '',
+  };
 }
 
 export function decodeShareData(encoded: string): ShareData | null {

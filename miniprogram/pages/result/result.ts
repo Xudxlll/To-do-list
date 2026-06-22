@@ -1,10 +1,17 @@
-import { CATEGORIES, ShareData, Option, validateShareData } from '../../data/categories';
+import {
+  CATEGORIES,
+  hydrateSharedOption,
+  Option,
+  SharedOptionSnapshot,
+  ShareData,
+  validateShareData,
+} from '../../data/categories';
 
 interface PartnerCategoryItem {
   categoryId: string;
   categoryName: string;
   icon: string;
-  options: Option[];
+  options: SharedOptionSnapshot[];
 }
 
 const app = getApp<{
@@ -102,7 +109,7 @@ Component({
       if (g.partnerShareData && g.partnerShareData.mode !== 'freeText') {
         const sel: Record<string, Option[]> = {};
         g.partnerShareData.selections.forEach(s => {
-          sel[s.categoryId] = s.options.map(o => ({ ...o }));
+          sel[s.categoryId] = s.options.map(option => hydrateSharedOption(s.categoryId, option));
         });
         g.selections = sel;
         app.saveSelections();

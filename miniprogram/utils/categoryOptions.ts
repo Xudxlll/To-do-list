@@ -1,5 +1,5 @@
 import { Category, CATEGORIES, Option, OptionGroup } from '../data/categories';
-import { CustomOptionRecord } from '../types/diary';
+import { LegacyCustomOptionRecord as CustomOptionRecord } from '../types/options';
 
 const OTHER_GROUP_ID = 'other';
 const OTHER_GROUP_TITLE = '其他';
@@ -54,6 +54,7 @@ export function mergeCustomOptions(customOptions: CustomOptionRecord[]): Categor
 
     const option: Option = {
       id: buildCustomOptionId(record.categoryId, normalizedName),
+      groupId: OTHER_GROUP_ID,
       name,
       emoji: '',
       isCustom: false,

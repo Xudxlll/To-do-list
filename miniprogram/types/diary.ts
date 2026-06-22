@@ -45,14 +45,6 @@ export interface DiaryDraft {
   updatedAt: number;
 }
 
-export interface CustomOptionRecord {
-  _id?: string;
-  categoryId: string;
-  name: string;
-  normalizedName: string;
-  createdAt: number;
-}
-
 export interface DiaryTimelineItem extends DiaryRecord {
   summary: string;
   coverFileId: string;

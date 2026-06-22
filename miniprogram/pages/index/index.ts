@@ -1,4 +1,4 @@
-import { Option, OptionGroup, encodeShareData, ShareData, Category } from '../../data/categories';
+import { Option, OptionGroup, encodeShareData, hydrateSharedOption, ShareData, Category } from '../../data/categories';
 import { buildCustomOptionId, mergeCustomOptions, normalizeOptionName } from '../../utils/categoryOptions';
 import { applyOptionOrder, moveOptionInGroups, readOptionOrder, saveGroupOptionOrder } from '../../utils/optionOrder';
 import { deleteCustomOption, listCustomOptions, upsertCustomOptions } from '../../services/customOptions';
@@ -77,7 +77,7 @@ Component({
       if (g.partnerShareData) {
         const sel: Record<string, Option[]> = {};
         g.partnerShareData.selections.forEach(s => {
-          sel[s.categoryId] = s.options.map(o => ({ ...o }));
+          sel[s.categoryId] = s.options.map(option => hydrateSharedOption(s.categoryId, option));
         });
         g.selections = sel;
         app.saveSelections();
@@ -259,7 +259,13 @@ Component({
         this.setData({ inputValue: '' });
       } catch (e) {
         console.warn('新增共享标签失败，已保留为本地自定义', e);
-        const customOption: Option = { id: `custom_${Date.now()}_${customCounter++}`, name, emoji: '', isCustom: true };
+        const customOption: Option = {
+          id: `custom_${Date.now()}_${customCounter++}`,
+          groupId: 'other',
+          name,
+          emoji: '',
+          isCustom: true,
+        };
         this.addLocalCustomOption(customOption);
         wx.showToast({ title: '云端新增失败，已临时添加', icon: 'none' });
       }

@@ -1,5 +1,5 @@
 import { CLOUD_COLLECTIONS, getCloudDb } from '../config/cloud';
-import { CustomOptionRecord } from '../types/diary';
+import { LegacyCustomOptionRecord as CustomOptionRecord } from '../types/options';
 import { normalizeOptionName } from '../utils/categoryOptions';
 
 function stableHash(input: string): string {

@@ -1,5 +1,6 @@
 import { CLOUD_COLLECTIONS, getCloudDb } from '../config/cloud';
 import { DiaryRecord } from '../types/diary';
+import { getPrimaryMoodId, normalizeMoodIds } from '../utils/diaryMoods';
 
 function diaryDocId(date: string): string {
   return `diary_${date.replace(/[^0-9]/g, '_')}`;
@@ -35,11 +36,12 @@ function getPhotoExtension(path: string): string {
 
 function diaryRecordToData(record: DiaryRecord): Partial<DiaryRecord> {
   const date = assertDiaryDate(record.date);
+  const moods = normalizeMoodIds(record.moods, record.mood);
   return {
     date,
     content: record.content || '',
-    mood: record.mood,
-    moods: record.moods && record.moods.length > 0 ? record.moods : [record.mood],
+    mood: getPrimaryMoodId(moods),
+    moods,
     location: record.location || '',
     photoFileIds: Array.isArray(record.photoFileIds) ? record.photoFileIds : [],
     tags: Array.isArray(record.tags) ? record.tags : [],
@@ -125,12 +127,13 @@ export async function saveDiary(record: DiaryRecord): Promise<DiaryRecord> {
   }
   const now = Date.now();
   const docId = diaryDocId(date);
+  const moods = normalizeMoodIds(record.moods, record.mood);
   const saved: DiaryRecord = {
     ...record,
     _id: docId,
     date,
-    mood: record.moods && record.moods.length > 0 ? record.moods[0] : record.mood,
-    moods: record.moods && record.moods.length > 0 ? record.moods : [record.mood],
+    mood: getPrimaryMoodId(moods),
+    moods,
     createdAt: existing && existing.createdAt ? existing.createdAt : record.createdAt || now,
     updatedAt: now,
   };

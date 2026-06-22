@@ -1,30 +1,27 @@
 import { Category } from '../../data/categories';
 import { listCustomOptions, upsertCustomOptions } from '../../services/customOptions';
 import { getDiaryByDate, saveDiary, uploadDiaryPhotos } from '../../services/diaries';
-import { DiaryDraft, DiaryRecord, MOODS, MoodId, RecognizedTag } from '../../types/diary';
-import { buildCustomOptionId, mergeCustomOptions, normalizeOptionName } from '../../utils/categoryOptions';
+import { DiaryDraft, DiaryRecord, MOODS, MoodId } from '../../types/diary';
+import { mergeCustomOptions } from '../../utils/categoryOptions';
 import { clearDiaryDraft, readDiaryDraft, saveDiaryDraft } from '../../utils/diaryDraft';
+import {
+  EditableRecognizedTag,
+  prepareEditableDiaryTags,
+  updateEditableDiaryTagCategory,
+  updateEditableDiaryTagName,
+} from '../../utils/diaryTagEditing';
 import { recognizeDiaryTagsForDiary } from '../../utils/diaryTags';
 import { formatDiaryDateLabel, isFutureDate, isSupportedDiaryDate, todayString } from '../../utils/date';
+import { clearDiaryDraftFields } from '../../utils/diaryForm';
+import {
+  buildMoodSelections,
+  getInitialMoodState,
+  getPrimaryMoodId,
+  normalizeMoodIds,
+  toggleMoodSelection,
+} from '../../utils/diaryMoods';
 
 let draftSaveTimer: number | null = null;
-
-function normalizeMoodIds(value: unknown, fallback: MoodId): MoodId[] {
-  const valid: Record<string, boolean> = {};
-  MOODS.forEach(item => {
-    valid[item.id] = true;
-  });
-  const source = Array.isArray(value) ? value : [fallback];
-  const moods = source.filter((item): item is MoodId => typeof item === 'string' && !!valid[item]);
-  return moods.length > 0 ? moods : [fallback];
-}
-
-function buildMoodSelections(moods: MoodId[]): Record<string, boolean> {
-  return moods.reduce((acc, mood) => {
-    acc[mood] = true;
-    return acc;
-  }, {} as Record<string, boolean>);
-}
 
 function formatSaveError(error: unknown): string {
   if (error && typeof error === 'object') {
@@ -55,15 +52,13 @@ Component({
     loading: true,
     saving: false,
     content: '',
-    mood: 'happy' as MoodId,
-    selectedMoodIds: ['happy'] as MoodId[],
-    moodSelections: buildMoodSelections(['happy']),
+    ...getInitialMoodState(),
     location: '',
     localPhotoPaths: [] as string[],
     existingPhotoFileIds: [] as string[],
     moods: MOODS,
     tagPanelVisible: false,
-    recognizedTags: [] as RecognizedTag[],
+    recognizedTags: [] as EditableRecognizedTag[],
     tagCategories: [] as Array<{ id: string; name: string }>,
     tagCategoryNames: [] as string[],
     existingRecord: null as DiaryRecord | null,
@@ -100,7 +95,7 @@ Component({
           this.setData({
             existingRecord: record,
             content: record.content,
-            mood: selectedMoodIds[0],
+            mood: getPrimaryMoodId(selectedMoodIds),
             selectedMoodIds,
             moodSelections: buildMoodSelections(selectedMoodIds),
             location: record.location,
@@ -120,7 +115,7 @@ Component({
       const selectedMoodIds = normalizeMoodIds(draft.moods, draft.mood);
       this.setData({
         content: draft.content,
-        mood: selectedMoodIds[0],
+        mood: getPrimaryMoodId(selectedMoodIds),
         selectedMoodIds,
         moodSelections: buildMoodSelections(selectedMoodIds),
         location: draft.location,
@@ -166,18 +161,8 @@ Component({
 
     onMoodTap(e: WechatMiniprogram.TouchEvent) {
       const id = e.currentTarget.dataset.id as MoodId;
-      const selected = this.data.selectedMoodIds.slice();
-      const index = selected.indexOf(id);
-      if (index >= 0) {
-        if (selected.length === 1) {
-          wx.showToast({ title: '至少保留一个心情', icon: 'none' });
-          return;
-        }
-        selected.splice(index, 1);
-      } else {
-        selected.push(id);
-      }
-      this.setData({ mood: selected[0], selectedMoodIds: selected, moodSelections: buildMoodSelections(selected) });
+      const selected = toggleMoodSelection(this.data.selectedMoodIds, id);
+      this.setData({ mood: getPrimaryMoodId(selected), selectedMoodIds: selected, moodSelections: buildMoodSelections(selected) });
       this.persistDraft();
     },
 
@@ -214,6 +199,33 @@ Component({
       this.persistDraft();
     },
 
+    clearDraftContent() {
+      wx.showModal({
+        title: '清空草稿',
+        content: '会清空今天发生了什么、地点和照片，已保存的日记不会立刻改动。',
+        confirmText: '清空',
+        confirmColor: '#FF6B81',
+        success: res => {
+          if (!res.confirm) return;
+          if (draftSaveTimer !== null) {
+            clearTimeout(draftSaveTimer);
+            draftSaveTimer = null;
+          }
+          this.setData(clearDiaryDraftFields({
+            content: this.data.content,
+            location: this.data.location,
+            localPhotoPaths: this.data.localPhotoPaths,
+            existingPhotoFileIds: this.data.existingPhotoFileIds,
+            mood: this.data.mood,
+            selectedMoodIds: this.data.selectedMoodIds,
+            moodSelections: this.data.moodSelections,
+          }));
+          clearDiaryDraft(this.data.date);
+          wx.showToast({ title: '草稿已清空', icon: 'success' });
+        },
+      });
+    },
+
     async onSaveTap() {
       if (!this.data.content.trim()) {
         wx.showToast({ title: '先写一点内容吧', icon: 'none' });
@@ -221,7 +233,9 @@ Component({
       }
       const customOptions = await listCustomOptions();
       const categories = mergeCustomOptions(customOptions);
-      const recognizedTags = recognizeDiaryTagsForDiary(this.data.content, this.data.location, categories);
+      const recognizedTags = prepareEditableDiaryTags(
+        recognizeDiaryTagsForDiary(this.data.content, this.data.location, categories)
+      );
       const tagCategories = categories.map((cat: Category) => ({ id: cat.id, name: cat.name }));
       this.setData({
         recognizedTags,
@@ -233,16 +247,8 @@ Component({
 
     onTagNameInput(e: WechatMiniprogram.Input) {
       const index = e.currentTarget.dataset.index as number;
-      const tags = this.data.recognizedTags.slice();
-      const tag = tags[index];
       const name = e.detail.value;
-      const normalizedName = normalizeOptionName(name);
-      tags[index] = {
-        ...tag,
-        name,
-        optionId: tag.source === 'candidate' ? buildCustomOptionId(tag.categoryId, normalizedName) : tag.optionId,
-      };
-      this.setData({ recognizedTags: tags });
+      this.setData({ recognizedTags: updateEditableDiaryTagName(this.data.recognizedTags, index, name) });
     },
 
     onTagCategoryChange(e: WechatMiniprogram.PickerChange) {
@@ -250,19 +256,7 @@ Component({
       const categoryIndex = Number(e.detail.value);
       const category = this.data.tagCategories[categoryIndex];
       if (!category) return;
-      const tags = this.data.recognizedTags.slice();
-      const tag = tags[index];
-      const normalizedName = normalizeOptionName(tag.name);
-      tags[index] = {
-        ...tag,
-        categoryId: category.id,
-        categoryName: category.name,
-        optionId: buildCustomOptionId(category.id, normalizedName),
-        source: 'candidate',
-        isCustom: true,
-        editable: true,
-      };
-      this.setData({ recognizedTags: tags });
+      this.setData({ recognizedTags: updateEditableDiaryTagCategory(this.data.recognizedTags, index, category) });
     },
 
     removeTag(e: WechatMiniprogram.TouchEvent) {
@@ -303,7 +297,7 @@ Component({
           _id: this.data.existingRecord ? this.data.existingRecord._id : undefined,
           date,
           content: this.data.content.trim(),
-          mood: this.data.selectedMoodIds[0],
+          mood: getPrimaryMoodId(this.data.selectedMoodIds),
           moods: this.data.selectedMoodIds,
           location: this.data.location.trim(),
           photoFileIds,

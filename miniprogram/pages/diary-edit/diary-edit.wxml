@@ -43,6 +43,7 @@
     </view>
 
     <view class="save-row">
+      <button class="clear-draft-btn {{saving ? 'btn-disabled' : ''}}" disabled="{{saving}}" bind:tap="clearDraftContent">清空草稿</button>
       <button class="save-btn {{saving ? 'btn-disabled' : ''}}" disabled="{{saving}}" bind:tap="onSaveTap">保存日记</button>
     </view>
   </block>
@@ -52,7 +53,7 @@
   <view class="tag-panel">
     <view class="tag-title">确认自动识别的标签</view>
     <view wx:if="{{recognizedTags.length === 0}}" class="tag-empty">没有识别到标签，可以直接保存。</view>
-    <view wx:for="{{recognizedTags}}" wx:key="optionId" wx:for-index="index" class="tag-edit-row">
+    <view wx:for="{{recognizedTags}}" wx:key="editKey" wx:for-index="index" class="tag-edit-row">
       <view class="tag-category">{{item.categoryName}}</view>
       <input class="tag-name-input" value="{{item.name}}" disabled="{{!item.editable}}" bindinput="onTagNameInput" data-index="{{index}}" />
       <picker wx:if="{{item.editable}}" mode="selector" range="{{tagCategoryNames}}" bindchange="onTagCategoryChange" data-index="{{index}}">

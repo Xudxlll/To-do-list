@@ -150,25 +150,37 @@
   width: 100%;
   margin: 34rpx 0 60rpx;
   display: flex;
+  gap: 18rpx;
   justify-content: center;
 }
 
+.clear-draft-btn,
 .save-btn {
-  width: 520rpx;
   margin: 0;
   border: none;
   border-radius: 999rpx;
   padding: 24rpx;
-  color: #fff;
   font-size: 32rpx;
   font-weight: 700;
-  background: linear-gradient(135deg, #FF6B81, #FF9A8B);
   display: flex;
   align-items: center;
   justify-content: center;
   line-height: 1.35;
 }
 
+.clear-draft-btn {
+  width: 220rpx;
+  color: #B77986;
+  background: #FFF0F2;
+}
+
+.save-btn {
+  width: 360rpx;
+  color: #fff;
+  background: linear-gradient(135deg, #FF6B81, #FF9A8B);
+}
+
+.clear-draft-btn.btn-disabled,
 .save-btn.btn-disabled {
   background: #D9D9D9;
   color: #999;

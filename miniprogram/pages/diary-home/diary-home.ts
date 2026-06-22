@@ -1,9 +1,10 @@
 import { listDiaryDatesByMonth, listRecentDiaries } from '../../services/diaries';
 import { DiaryRecord, DiaryTimelineItem, MOODS } from '../../types/diary';
 import { monthKey, todayString } from '../../utils/date';
+import { normalizeMoodIds } from '../../utils/diaryMoods';
 
 function normalizeRecordMoods(record: DiaryRecord) {
-  const ids = record.moods && record.moods.length > 0 ? record.moods : [record.mood];
+  const ids = normalizeMoodIds(record.moods, record.mood);
   return ids
     .map(id => MOODS.find(item => item.id === id))
     .filter((item): item is typeof MOODS[number] => !!item);
@@ -11,13 +12,12 @@ function normalizeRecordMoods(record: DiaryRecord) {
 
 function buildTimelineItem(record: DiaryRecord): DiaryTimelineItem {
   const moods = normalizeRecordMoods(record);
-  const displayMoods = moods.length > 0 ? moods : [MOODS[0]];
   return {
     ...record,
     summary: record.content.length > 42 ? `${record.content.slice(0, 42)}...` : record.content,
     coverFileId: record.photoFileIds[0] || '',
-    moodEmoji: displayMoods.map(item => item.emoji).join(''),
-    moodLabel: displayMoods.map(item => item.label).join('、'),
+    moodEmoji: moods.map(item => item.emoji).join(''),
+    moodLabel: moods.map(item => item.label).join('、'),
   };
 }
 

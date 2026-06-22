@@ -25,7 +25,7 @@ export interface DiaryRecord {
   _id?: string;
   date: string;
   content: string;
-  mood: MoodId;
+  mood: MoodId | '';
   moods?: MoodId[];
   location: string;
   photoFileIds: string[];
@@ -37,7 +37,7 @@ export interface DiaryRecord {
 export interface DiaryDraft {
   date: string;
   content: string;
-  mood: MoodId;
+  mood: MoodId | '';
   moods?: MoodId[];
   location: string;
   localPhotoPaths: string[];

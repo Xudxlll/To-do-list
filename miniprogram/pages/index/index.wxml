@@ -1,7 +1,7 @@
 <navigation-bar title="今天干什么" back="{{true}}" customBack="{{returnToPartnerWelcome}}" bind:back="onNavBack" color="black" background="#FFF5F5"></navigation-bar>
 
 <view class="main-layout">
-  <scroll-view class="left-sidebar" scroll-y type="list" enhanced show-scrollbar="{{false}}">
+  <scroll-view class="left-sidebar" scroll-y show-scrollbar="{{false}}">
     <view
       wx:for="{{categories}}"
       wx:key="id"
@@ -18,8 +18,6 @@
   <scroll-view
     class="right-content"
     scroll-y="{{!draggingOptionId && !dragSaving}}"
-    type="list"
-    enhanced
     show-scrollbar="{{false}}"
     scroll-into-view="{{scrollIntoView}}"
     catch:touchmove="onOptionDragMove"

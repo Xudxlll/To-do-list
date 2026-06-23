@@ -3,7 +3,10 @@
     "pages/welcome/welcome",
     "pages/free-write/free-write",
     "pages/index/index",
-    "pages/result/result"
+    "pages/result/result",
+    "pages/diary-home/diary-home",
+    "pages/diary-calendar/diary-calendar",
+    "pages/diary-edit/diary-edit"
   ],
   "window": {
     "navigationBarTextStyle": "black",

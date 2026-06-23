@@ -1,10 +1,17 @@
-import { CATEGORIES, ShareData, Option } from '../../data/categories';
+import {
+  CATEGORIES,
+  hydrateSharedOption,
+  Option,
+  SharedOptionSnapshot,
+  ShareData,
+  validateShareData,
+} from '../../data/categories';
 
 interface PartnerCategoryItem {
   categoryId: string;
   categoryName: string;
   icon: string;
-  options: Option[];
+  options: SharedOptionSnapshot[];
 }
 
 const app = getApp<{
@@ -14,8 +21,8 @@ const app = getApp<{
     partnerShareData: ShareData | null;
   };
   saveSelections(): void;
-  saveLockedState(data: ShareData): void;
-  clearLockedState(): void;
+  saveLockedState(data: ShareData): Promise<void>;
+  clearLockedState(): Promise<void>;
 }>();
 
 Component({
@@ -48,7 +55,8 @@ Component({
   methods: {
     showLocked() {
       const locked = wx.getStorageSync('lockedState');
-      if (!locked || !locked.shareData) {
+      if (!locked || !validateShareData(locked.shareData)) {
+        wx.removeStorageSync('lockedState');
         wx.reLaunch({ url: '/pages/welcome/welcome' });
         return;
       }
@@ -101,20 +109,20 @@ Component({
       if (g.partnerShareData && g.partnerShareData.mode !== 'freeText') {
         const sel: Record<string, Option[]> = {};
         g.partnerShareData.selections.forEach(s => {
-          sel[s.categoryId] = s.options.map(o => ({ ...o }));
+          sel[s.categoryId] = s.options.map(option => hydrateSharedOption(s.categoryId, option));
         });
         g.selections = sel;
         app.saveSelections();
       }
-      wx.reLaunch({ url: '/pages/index/index' });
+      wx.navigateTo({ url: '/pages/index/index?returnTo=partnerWelcome' });
     },
 
-    onPerfect() {
+    async onPerfect() {
       const g = app.globalData;
       const shareData = g.partnerShareData || this.data.lockedShareData;
       if (!shareData) return;
 
-      app.saveLockedState(shareData);
+      await app.saveLockedState(shareData);
 
       wx.showToast({ title: '今日计划已定！🎉', icon: 'none', duration: 1500 });
       setTimeout(() => {
@@ -126,8 +134,8 @@ Component({
       }, 1500);
     },
 
-    onReset() {
-      app.clearLockedState();
+    async onReset() {
+      await app.clearLockedState();
       const g = app.globalData;
       g.selections = {};
       g.partnerShareData = null;

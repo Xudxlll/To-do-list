@@ -1,0 +1,141 @@
+.calendar-page {
+  flex: 1;
+  background: linear-gradient(180deg, #FFF5F5 0%, #FFF9F1 100%);
+  padding: 26rpx 28rpx 44rpx;
+  box-sizing: border-box;
+}
+
+.month-header {
+  height: 86rpx;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.month-btn {
+  width: 54rpx;
+  height: 54rpx;
+  flex-shrink: 0;
+  border-radius: 999rpx;
+  background: rgba(255, 255, 255, 0.76);
+  color: #B77986;
+  font-size: 42rpx;
+  line-height: 50rpx;
+  font-weight: 300;
+  text-align: center;
+  box-shadow: 0 8rpx 22rpx rgba(255, 107, 129, 0.12);
+}
+
+.month-btn.disabled {
+  opacity: 0.32;
+}
+
+.month-title {
+  flex: 1;
+  min-width: 0;
+  color: var(--text-primary);
+  font-size: 36rpx;
+  font-weight: 800;
+  letter-spacing: 1rpx;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.calendar-card {
+  margin-top: 18rpx;
+  padding: 24rpx 12rpx 28rpx;
+  border-radius: 34rpx;
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: 0 18rpx 52rpx rgba(255, 107, 129, 0.1);
+}
+
+.week-row {
+  display: flex;
+  align-items: center;
+}
+
+.week-label {
+  width: 14.2857%;
+  text-align: center;
+  color: #B77986;
+  font-size: 28rpx;
+  font-weight: 800;
+}
+
+.day-grid {
+  margin-top: 12rpx;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+.day-cell {
+  position: relative;
+  width: 14.2857%;
+  height: 78rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+}
+
+.day-number {
+  width: 54rpx;
+  height: 54rpx;
+  border-radius: 50%;
+  text-align: center;
+  line-height: 54rpx;
+  color: var(--text-primary);
+  font-size: 30rpx;
+  font-weight: 800;
+}
+
+.day-cell.muted .day-number {
+  color: #C9B8B8;
+}
+
+.day-cell.future .day-number {
+  color: #D6CACA;
+}
+
+.day-cell.today .day-number {
+  background: #FF6B81;
+  color: #fff;
+  box-shadow: 0 10rpx 22rpx rgba(255, 107, 129, 0.28);
+}
+
+.day-cell.has-diary .day-number {
+  box-shadow: 0 0 0 3rpx rgba(255, 107, 129, 0.32);
+}
+
+.day-cell.today.has-diary .day-number {
+  box-shadow:
+    0 10rpx 22rpx rgba(255, 107, 129, 0.28),
+    0 0 0 3rpx rgba(255, 107, 129, 0.28);
+}
+
+.dot {
+  position: absolute;
+  bottom: 5rpx;
+  width: 8rpx;
+  height: 8rpx;
+  border-radius: 50%;
+  background: #FF6B81;
+}
+
+.state-card {
+  margin-top: 28rpx;
+  padding: 60rpx 28rpx;
+  border-radius: 28rpx;
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.retry-btn {
+  margin-top: 20rpx;
+  border: none;
+  border-radius: 999rpx;
+  padding: 14rpx 28rpx;
+  color: #fff;
+  background: #FF6B81;
+}

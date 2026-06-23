@@ -1,0 +1,40 @@
+<navigation-bar title="我们的日记" back="{{true}}" color="black" background="#FFF5F5"></navigation-bar>
+
+<scroll-view class="diary-home" scroll-y type="list" enhanced show-scrollbar="{{false}}">
+  <view class="hero-card">
+    <view>
+      <view class="hero-kicker">OUR DAYS</view>
+      <view class="hero-title">把今天留住</view>
+      <view class="hero-subtitle">这个月已经记录 {{monthDiaryCount}} 天</view>
+    </view>
+    <button class="calendar-btn" bind:tap="goCalendar">查看月历</button>
+  </view>
+
+  <button class="today-btn" bind:tap="goToday">写今天的日记</button>
+
+  <view wx:if="{{loading}}" class="state-card">正在加载日记...</view>
+  <view wx:elif="{{loadError}}" class="state-card">
+    <view>日记加载失败</view>
+    <button class="retry-btn" bind:tap="loadDiaries">重试</button>
+  </view>
+  <view wx:elif="{{timeline.length === 0}}" class="state-card">还没有日记，先写下今天吧。</view>
+
+  <view wx:else class="timeline">
+    <view wx:for="{{timeline}}" wx:key="date" class="diary-card" bind:tap="openDiary" data-date="{{item.date}}">
+      <image wx:if="{{item.coverFileId}}" class="cover" src="{{item.coverFileId}}" mode="aspectFill" />
+      <view class="diary-body">
+        <view class="date-row">
+          <text class="date">{{item.date}}</text>
+          <text wx:if="{{item.moodLabel}}" class="mood">{{item.moodEmoji}} {{item.moodLabel}}</text>
+        </view>
+        <view class="summary">{{item.summary}}</view>
+        <view wx:if="{{item.location}}" class="location">📍 {{item.location}}</view>
+        <view wx:if="{{item.tags.length > 0}}" class="tag-row">
+          <text wx:for="{{item.tags}}" wx:key="optionId" class="tag">{{item.name}}</text>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <view style="height: 48rpx;"></view>
+</scroll-view>

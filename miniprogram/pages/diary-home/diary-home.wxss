@@ -1,0 +1,135 @@
+.diary-home {
+  flex: 1;
+  background: linear-gradient(180deg, #FFF5F5 0%, #FFF9F1 52%, #F7FBFF 100%);
+  padding: 28rpx 28rpx 0;
+  box-sizing: border-box;
+}
+
+.hero-card,
+.state-card,
+.diary-card {
+  background: rgba(255, 255, 255, 0.92);
+  border-radius: 30rpx;
+  box-shadow: 0 18rpx 52rpx rgba(255, 107, 129, 0.12);
+}
+
+.hero-card {
+  padding: 30rpx;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.hero-kicker {
+  font-size: 22rpx;
+  color: #B77986;
+  letter-spacing: 2rpx;
+}
+
+.hero-title {
+  margin-top: 8rpx;
+  font-size: 44rpx;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.hero-subtitle {
+  margin-top: 8rpx;
+  font-size: 26rpx;
+  color: var(--text-secondary);
+}
+
+.calendar-btn,
+.today-btn,
+.retry-btn {
+  border: none;
+  border-radius: 999rpx;
+  font-size: 26rpx;
+}
+
+.calendar-btn {
+  padding: 16rpx 24rpx;
+  color: #FF6B81;
+  background: #FFF0F2;
+}
+
+.today-btn {
+  width: 100%;
+  margin: 26rpx 0;
+  padding: 24rpx;
+  color: #fff;
+  font-weight: 700;
+  background: linear-gradient(135deg, #FF6B81, #FF9A8B);
+}
+
+.state-card {
+  padding: 50rpx 28rpx;
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.retry-btn {
+  margin-top: 20rpx;
+  padding: 14rpx 28rpx;
+  color: #fff;
+  background: #FF6B81;
+}
+
+.diary-card {
+  overflow: hidden;
+  margin-bottom: 24rpx;
+}
+
+.cover {
+  width: 100%;
+  height: 300rpx;
+  display: block;
+}
+
+.diary-body {
+  padding: 26rpx;
+}
+
+.date-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.date {
+  font-size: 26rpx;
+  color: #B77986;
+}
+
+.mood {
+  font-size: 24rpx;
+  color: #B77986;
+}
+
+.summary {
+  margin-top: 16rpx;
+  font-size: 32rpx;
+  line-height: 1.55;
+  color: var(--text-primary);
+}
+
+.location {
+  margin-top: 14rpx;
+  font-size: 24rpx;
+  color: var(--text-secondary);
+}
+
+.tag-row {
+  margin-top: 18rpx;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12rpx;
+}
+
+.tag {
+  padding: 8rpx 16rpx;
+  border-radius: 999rpx;
+  color: #FF6B81;
+  background: #FFF0F2;
+  font-size: 22rpx;
+}

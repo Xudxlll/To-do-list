@@ -24,6 +24,10 @@
     <view class="eyebrow">TODAY</view>
     <view class="hero-title">今天怎么过</view>
     <view class="hero-subtitle">可以认真安排，也可以随性一点。</view>
+    <view class="diary-entry" bind:tap="goDiary">
+      <view class="diary-entry-icon">📖</view>
+      <view class="diary-entry-text">我们的日记</view>
+    </view>
   </view>
 
   <view wx:if="{{hasPartnerShare}}" class="welcome-actions">

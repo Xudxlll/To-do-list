@@ -12,7 +12,7 @@ page {
 
 .memory-collage {
   position: absolute;
-  top: 246rpx;
+  top: 306rpx;
   right: 0;
   bottom: 210rpx;
   left: 0;
@@ -256,11 +256,34 @@ page {
   pointer-events: none;
 }
 
+.diary-entry {
+  width: 224rpx;
+  margin: 24rpx auto 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10rpx;
+  padding: 16rpx 20rpx;
+  border-radius: 22rpx;
+  background: rgba(255, 255, 255, 0.92);
+  color: #C45F72;
+  box-shadow: 0 12rpx 34rpx rgba(120, 54, 69, 0.16);
+}
+
+.diary-entry-icon {
+  font-size: 28rpx;
+}
+
+.diary-entry-text {
+  font-size: 24rpx;
+  font-weight: 700;
+}
+
 .hero-copy {
   position: absolute;
   left: 48rpx;
   right: 48rpx;
-  top: 52rpx;
+  top: 16rpx;
   z-index: 2;
   text-align: center;
 }

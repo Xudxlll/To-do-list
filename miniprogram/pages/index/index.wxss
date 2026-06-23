@@ -97,8 +97,10 @@
 }
 
 .search-icon {
-  color: var(--text-secondary);
-  font-size: 24rpx;
+  color: var(--accent);
+  font-size: 32rpx;
+  font-weight: 700;
+  line-height: 1;
   flex-shrink: 0;
 }
 
@@ -267,6 +269,14 @@
 .option-item.drag-placeholder {
   border: 2rpx dashed var(--accent-light);
   background: rgba(255, 255, 255, 0.76);
+}
+
+.drag-drop-line {
+  height: 4rpx;
+  margin: -2rpx 18rpx 10rpx;
+  border-radius: 4rpx;
+  background: var(--accent);
+  box-shadow: 0 0 12rpx rgba(255, 91, 122, 0.32);
 }
 
 .option-empty {
@@ -471,6 +481,13 @@
   box-sizing: border-box;
   font-size: 26rpx;
   color: var(--text-primary);
+}
+
+.editor-input {
+  height: 88rpx;
+  line-height: 88rpx;
+  padding-top: 0;
+  padding-bottom: 0;
 }
 
 .editor-textarea {

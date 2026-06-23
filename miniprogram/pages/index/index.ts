@@ -40,6 +40,7 @@ type DragItemRect = {
 
 const COLLAPSED_STORAGE_KEY = 'categoryCollapsedGroups:v1';
 const DRAG_AUTO_EXPAND_DELAY = 500;
+const OPTION_CATALOG_REFRESH_INTERVAL = 15000;
 const INITIAL_CATEGORIES = buildCatalog([], readOptionOrder());
 let preDragGroupsSnapshot: GroupViewModel[] | null = null;
 let preDragCollapsedGroupsSnapshot: CollapsedGroupMap | null = null;
@@ -47,6 +48,7 @@ let dragGroupRects: DragGroupRect[] = [];
 let dragItemRects: DragItemRect[] = [];
 let dragAutoExpandTimer: ReturnType<typeof setTimeout> | null = null;
 let dragAutoExpandGroupId = '';
+let optionCatalogRefreshTimer: ReturnType<typeof setInterval> | null = null;
 
 const app = getApp<{
   globalData: {
@@ -339,11 +341,13 @@ Component({
     attached() {
       this.loadShareDataIfPresent();
       this.setData({ collapsedGroups: readCollapsedGroups() });
+      this.startOptionCatalogAutoRefresh();
     },
     ready() {
       void this.loadOptionCatalog();
     },
     detached() {
+      this.stopOptionCatalogAutoRefresh();
       clearDragRuntimeState();
     },
   },
@@ -355,6 +359,7 @@ Component({
         collapsedGroups: this.data.collapsedGroups,
         searchQuery: this.data.searchQuery,
       });
+      void this.loadOptionCatalog({ silent: true });
     },
   },
 
@@ -388,7 +393,21 @@ Component({
       }
     },
 
-    async loadOptionCatalog() {
+    startOptionCatalogAutoRefresh() {
+      this.stopOptionCatalogAutoRefresh();
+      optionCatalogRefreshTimer = setInterval(() => {
+        if (this.data.editorSaving || this.data.dragSaving || this.data.draggingOptionId) return;
+        void this.loadOptionCatalog({ silent: true });
+      }, OPTION_CATALOG_REFRESH_INTERVAL);
+    },
+
+    stopOptionCatalogAutoRefresh() {
+      if (!optionCatalogRefreshTimer) return;
+      clearInterval(optionCatalogRefreshTimer);
+      optionCatalogRefreshTimer = null;
+    },
+
+    async loadOptionCatalog(options: { silent?: boolean } = {}) {
       const legacyOrder = readOptionOrder();
       const cachedRecords = readOptionCatalogCache();
       this.renderCatalog(cachedRecords, { legacyOrder, collapsedGroups: this.data.collapsedGroups });
@@ -402,10 +421,12 @@ Component({
         });
       } catch (error) {
         console.warn('加载活动目录失败，已回退到缓存/默认目录', error);
-        wx.showToast({
-          title: '活动目录刷新失败，先用当前内容',
-          icon: 'none',
-        });
+        if (!options.silent) {
+          wx.showToast({
+            title: '活动目录刷新失败，先用当前内容',
+            icon: 'none',
+          });
+        }
       }
     },
 

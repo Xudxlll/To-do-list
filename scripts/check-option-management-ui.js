@@ -127,6 +127,8 @@ assert(/bind:tap="toggleOptionGroup"/.test(wxmlSource), 'WXML 必须支持分组
 assert(/catch:tap="openOptionEditor"/.test(wxmlSource), 'WXML 分组 header 必须提供新增入口');
 assert(/data-group-id="{{group.id}}"/.test(wxmlSource), 'WXML 分组结构必须带 group id');
 assert(/bind:input="onSearchInput"/.test(wxmlSource), 'WXML 必须提供搜索输入');
+assert(/placeholder="搜一搜去干啥"/.test(wxmlSource), 'WXML 搜索栏 placeholder 应使用新的文案');
+assert(/class="search-icon">🔍<\/text>/.test(wxmlSource), 'WXML 搜索图标应使用明显的放大镜');
 assert(/searchResults/.test(wxmlSource), 'WXML 必须渲染搜索结果');
 assert(/bind:tap="onSearchResultTap"/.test(wxmlSource), 'WXML 搜索结果必须可点击');
 assert(/editorName/.test(wxmlSource), 'WXML 编辑器必须绑定名称输入');
@@ -146,6 +148,8 @@ assert(/dragSaving/.test(wxmlSource), 'WXML 必须渲染拖拽保存中状态');
 assert(/option-empty/.test(wxmlSource), 'WXML 展开空分组时必须渲染 empty 状态');
 assert(/drag-placeholder/.test(wxmlSource), 'WXML 必须渲染拖拽 source placeholder');
 assert(/drag-target/.test(wxmlSource), 'WXML 必须渲染目标分组高亮');
+assert(/drag-drop-line/.test(wxmlSource), 'WXML 拖拽目标位置必须渲染放置提示线');
+assert(/wx:for-index="optionIndex"/.test(wxmlSource), 'WXML 放置提示线必须能读取列表项位置');
 assert(/aria-label="拖拽排序"/.test(wxmlSource), 'WXML 拖拽手柄必须提供 aria-label');
 assert(/☰|≡/.test(wxmlSource), 'WXML 拖拽手柄应使用熟悉的排序符号');
 
@@ -174,9 +178,13 @@ assert(/☰|≡/.test(wxmlSource), 'WXML 拖拽手柄应使用熟悉的排序符
   '.option-empty',
   '.drag-placeholder',
   '.drag-target',
+  '.drag-drop-line',
 ].forEach(selector => {
   assertIncludes(wxssSource, selector, `WXSS 必须包含 ${selector}`);
 });
+
+assert(/\.search-icon[\s\S]*font-size:\s*32rpx/.test(wxssSource), 'WXSS 搜索图标应比正文更明显');
+assert(/\.editor-input[\s\S]*height:\s*88rpx/.test(wxssSource), 'WXSS 名称输入框应有足够高度');
 
 [
   'pointer-events',
@@ -294,6 +302,8 @@ let saveOrderFailures = [];
 let updateFailures = [];
 let timerIdSeed = 0;
 let timerQueue = [];
+let intervalIdSeed = 0;
+let intervalQueue = [];
 
 function resetRuntimeState() {
   appMock = {
@@ -325,6 +335,8 @@ function resetRuntimeState() {
   updateFailures = [];
   timerIdSeed = 0;
   timerQueue = [];
+  intervalIdSeed = 0;
+  intervalQueue = [];
 }
 
 function searchCatalog(categories, query) {
@@ -496,12 +508,41 @@ function fakeClearTimeout(timerId) {
   ));
 }
 
+function fakeSetInterval(callback, delay) {
+  const timerId = ++intervalIdSeed;
+  intervalQueue.push({
+    id: timerId,
+    callback,
+    delay,
+    cleared: false,
+  });
+  return timerId;
+}
+
+function fakeClearInterval(timerId) {
+  intervalQueue = intervalQueue.map(timer => (
+    timer.id === timerId ? { ...timer, cleared: true } : timer
+  ));
+}
+
 async function flushTimers() {
   while (timerQueue.length > 0) {
     const next = timerQueue.shift();
     if (!next || next.cleared) continue;
     await next.callback();
   }
+}
+
+async function flushIntervals() {
+  const activeTimers = intervalQueue.filter(timer => !timer.cleared);
+  for (const timer of activeTimers) {
+    await timer.callback();
+  }
+}
+
+async function flushMicrotasks() {
+  await Promise.resolve();
+  await Promise.resolve();
 }
 
 const realOptionOrderModule = require('../miniprogram/utils/optionOrder.ts');
@@ -612,6 +653,8 @@ function loadComponentConfig() {
   resetRuntimeState();
   global.setTimeout = fakeSetTimeout;
   global.clearTimeout = fakeClearTimeout;
+  global.setInterval = fakeSetInterval;
+  global.clearInterval = fakeClearInterval;
   global.getApp = () => appMock;
   global.Component = config => {
     capturedComponent = config;
@@ -893,14 +936,33 @@ async function runShowReadsCacheBehaviorTest() {
   });
 
   instance.pageLifetimes.show.call(instance);
+  await flushMicrotasks();
 
-  assert.equal(readCacheCalls, 1, 'pageLifetimes.show 应读取最新缓存');
-  assert.equal(listCalls, 0, 'pageLifetimes.show 不应重复触发云端加载');
+  assert.equal(readCacheCalls, 2, 'pageLifetimes.show 应先用缓存重建页面，再为后台刷新读取缓存');
+  assert.equal(listCalls, 1, 'pageLifetimes.show 应在缓存重建后后台刷新云端目录');
   assert.deepEqual(instance.data.catalogRecords, cacheCatalog, 'pageLifetimes.show 应使用缓存重建页面');
   assert.deepEqual(appMock.globalData.selections, {
     eat: [clone(BASE_CATALOG[0].optionGroups[0].options[0])],
   }, 'pageLifetimes.show 应同步缓存后的 selections');
   assert.equal(appMock.saveSelectionsCalls, 1, 'pageLifetimes.show 刷新 selections 后应保存');
+}
+
+async function runPeriodicRefreshBehaviorTest() {
+  const config = loadComponentConfig();
+  const instance = createInstance(config);
+
+  config.lifetimes.attached.call(instance);
+  assert.equal(intervalQueue.length, 1, 'attached 应启动一个活动目录自动刷新定时器');
+  assert.equal(intervalQueue[0].delay, 15000, '自动刷新间隔应为 15 秒');
+
+  await flushIntervals();
+  await flushMicrotasks();
+  assert.equal(listCalls, 1, '定时器触发时应刷新一次云端活动目录');
+
+  config.lifetimes.detached.call(instance);
+  await flushIntervals();
+  await flushMicrotasks();
+  assert.equal(listCalls, 1, 'detached 后应停止自动刷新');
 }
 
 async function runInvalidDragEndDoesNotPersistTest() {
@@ -1226,6 +1288,7 @@ async function main() {
   await runManageSearchTapBehaviorTest();
   await runNormalSearchTapBehaviorTest();
   await runShowReadsCacheBehaviorTest();
+  await runPeriodicRefreshBehaviorTest();
   await runSaveEditorToastBehaviorTest();
   await runCloseEditorKeepsSavingDraftTest();
   await runInvalidDragEndDoesNotPersistTest();

@@ -44,6 +44,7 @@ function buildOrderDocId(categoryId, groupId) {
 
 const storage = new Map();
 let currentCloudDb = null;
+let callFunctionCalls = [];
 global.wx = {
   getStorageSync(key) {
     return storage.has(key) ? deepClone(storage.get(key)) : undefined;
@@ -61,6 +62,10 @@ global.wx = {
         throw new Error('这个测试不应直接走 wx.cloud.database');
       }
       return currentCloudDb;
+    },
+    async callFunction(payload) {
+      callFunctionCalls.push(deepClone(payload));
+      return { result: { ok: true } };
     },
   },
 };
@@ -356,6 +361,7 @@ class FakeDb {
 
 function resetStorage() {
   storage.clear();
+  callFunctionCalls = [];
 }
 
 function setCloudDb(db) {
@@ -864,6 +870,65 @@ async function main() {
   const reloadedEmptyOrder = (await service.listOptionCatalogRecords(orderDb))
     .find(record => record.recordType === 'group_order' && record.categoryId === 'eat' && record.groupId === 'cuisine');
   assert.deepEqual(reloadedEmptyOrder.optionIds, [], '源分组空顺序重新从云端读取时不应被归一化丢弃');
+
+  resetStorage();
+  const cloudProxyDb = new FakeDb({
+    [COLLECTION_NAME]: [
+      makeManagedRecord(70, {
+        _id: buildManagedDocId('option_proxy_existing'),
+        optionId: 'option_proxy_existing',
+        categoryId: 'eat',
+        groupId: 'cuisine',
+        source: 'custom',
+        name: '云函数旧标签',
+        normalizedName: '云函数旧标签',
+        description: '旧描述',
+        deleted: false,
+        createdAt: 700,
+        updatedAt: 701,
+      }),
+    ],
+  });
+  setCloudDb(cloudProxyDb);
+  const proxiedCreated = await service.createSharedOption(
+    { categoryId: 'eat', groupId: 'cuisine', name: '云函数新增', description: '走代理' },
+    CATEGORIES,
+    undefined,
+    { now: 800, randomPart: 'proxy' }
+  );
+  const proxiedUpdated = await service.updateSharedOption(
+    { id: 'option_proxy_existing', groupId: 'cuisine', name: '云函数旧标签', emoji: '', isCustom: true, canDelete: true, description: '旧描述' },
+    { categoryId: 'eat', groupId: 'grill', name: '云函数编辑', description: '也走代理' },
+    CATEGORIES
+  );
+  const proxiedDeleted = await service.deleteSharedOption(
+    proxiedUpdated,
+    'eat'
+  );
+  const proxiedOrders = await service.saveSharedGroupOrders('eat', [
+    { groupId: 'cuisine', optionIds: [proxiedCreated.id] },
+    { groupId: 'grill', optionIds: ['option_proxy_existing'] },
+  ]);
+
+  assert.deepEqual(callFunctionCalls.map(call => call.name), [
+    'manageOptions',
+    'manageOptions',
+    'manageOptions',
+    'manageOptions',
+  ], '默认写操作必须统一调用 manageOptions 云函数');
+  assert.deepEqual(callFunctionCalls.map(call => call.data.action), [
+    'createOption',
+    'updateOption',
+    'deleteOption',
+    'saveGroupOrders',
+  ], '云函数代理必须区分新增、编辑、删除和排序动作');
+  assert.equal(getCollection(cloudProxyDb).docSetCalls.length, 0, '默认写操作不应由小程序端直接 set custom_options');
+  assert.equal(cloudProxyDb.runTransactionCalls, 0, '默认排序不应由小程序端直接开启数据库事务');
+  assert.equal(proxiedDeleted.deleted, true, '云函数删除成功后本地仍应得到 tombstone');
+  assert.equal(proxiedOrders.length, 2, '云函数排序成功后本地仍应得到顺序记录');
+  assert.equal(service.readOptionCatalogCache().some(record => record.recordType === 'option' && record.optionId === proxiedCreated.id), true, '云函数新增成功后应刷新本地缓存');
+  assert.equal(service.readOptionCatalogCache().some(record => record.recordType === 'group_order' && record.groupId === 'grill'), true, '云函数排序成功后应刷新本地缓存');
+  setCloudDb(null);
 
   let fixedOrderFailed = false;
   try {

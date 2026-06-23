@@ -1,5 +1,5 @@
 import { CATEGORIES, Category, Option } from '../data/categories';
-import { CLOUD_COLLECTIONS, getCloudDb } from '../config/cloud';
+import { CLOUD_COLLECTIONS, getCloudDb, initCloud } from '../config/cloud';
 import {
   GroupOrderRecord,
   LegacyCustomOptionRecord,
@@ -21,6 +21,8 @@ type SharedGroupOrderInput = {
   groupId: string;
   optionIds: string[];
 };
+
+type ManageOptionsAction = 'createOption' | 'updateOption' | 'deleteOption' | 'saveGroupOrders';
 
 function createServiceError(code: string, message: string): Error & { code: string } {
   const error = new Error(message) as Error & { code: string };
@@ -390,6 +392,17 @@ async function assertNoLatestDuplicate(
   }
 }
 
+async function callManageOptionsFunction(action: ManageOptionsAction, payload: Record<string, unknown>): Promise<void> {
+  initCloud();
+  await wx.cloud.callFunction({
+    name: 'manageOptions',
+    data: {
+      action,
+      payload,
+    },
+  });
+}
+
 export function readOptionCatalogCache(): OptionCatalogRecord[] {
   const value = readStorageValue(OPTION_CATALOG_CACHE_KEY);
   if (!Array.isArray(value)) return [];
@@ -427,19 +440,24 @@ export async function listOptionCatalogRecords(db = getCloudDb()): Promise<Optio
 export async function createSharedOption(
   input: SharedOptionInput,
   categories: Category[],
-  db = getCloudDb(),
+  db?: DB.Database,
   idParts: SharedOptionIdParts = {}
 ): Promise<Option> {
+  const readDb = db || getCloudDb();
   const validation = validateOptionInput(categories, input);
   if (!validation.ok) {
     throw createServiceError(validation.code, `共享标签创建失败：${validation.code}`);
   }
-  await assertNoLatestDuplicate(db, input);
+  await assertNoLatestDuplicate(readDb, input);
 
   const now = typeof idParts.now === 'number' && Number.isFinite(idParts.now) ? idParts.now : Date.now();
   const optionId = createStableOptionId(now, idParts.randomPart);
   const record = buildManagedRecord(optionId, input, 'custom', now, now, false);
-  await db.collection(CLOUD_COLLECTIONS.customOptions).doc(record._id as string).set({ data: record });
+  if (db) {
+    await db.collection(CLOUD_COLLECTIONS.customOptions).doc(record._id as string).set({ data: record });
+  } else {
+    await callManageOptionsFunction('createOption', { record });
+  }
 
   await enqueueCatalogCacheMutation(latest => replaceManagedRecord(latest, record));
   return buildOptionFromManagedRecord(record);
@@ -449,21 +467,26 @@ export async function updateSharedOption(
   option: Option,
   input: SharedOptionInput,
   categories: Category[],
-  db = getCloudDb()
+  db?: DB.Database
 ): Promise<Option> {
+  const readDb = db || getCloudDb();
   const validation = validateOptionInput(categories, input, option.id);
   if (!validation.ok) {
     throw createServiceError(validation.code, `共享标签更新失败：${validation.code}`);
   }
-  await assertNoLatestDuplicate(db, input, option.id);
+  await assertNoLatestDuplicate(readDb, input, option.id);
 
-  const existing = await resolveManagedRecordForWrite(db, option);
+  const existing = await resolveManagedRecordForWrite(readDb, option);
   const fallback = buildFallbackManagedMetadata(option);
   const source: ManagedOptionRecord['source'] = existing ? existing.source : fallback.source;
   const createdAt = existing ? existing.createdAt : fallback.createdAt;
   const updatedAt = Date.now();
   const record = buildManagedRecord(option.id, input, source, createdAt, updatedAt, false);
-  await db.collection(CLOUD_COLLECTIONS.customOptions).doc(record._id as string).set({ data: record });
+  if (db) {
+    await db.collection(CLOUD_COLLECTIONS.customOptions).doc(record._id as string).set({ data: record });
+  } else {
+    await callManageOptionsFunction('updateOption', { record });
+  }
 
   await enqueueCatalogCacheMutation(latest => replaceManagedRecord(latest, record));
   return buildOptionFromManagedRecord(record);
@@ -472,14 +495,15 @@ export async function updateSharedOption(
 export async function deleteSharedOption(
   option: Option,
   categoryId: string,
-  db = getCloudDb()
+  db?: DB.Database
 ): Promise<ManagedOptionRecord> {
+  const readDb = db || getCloudDb();
   const normalizedCategoryId = trimText(categoryId);
   if (!normalizedCategoryId || !getPresetCategory(normalizedCategoryId)) {
     throw createServiceError('category', '共享标签删除失败：分类无效');
   }
 
-  const existing = await resolveManagedRecordForWrite(db, option);
+  const existing = await resolveManagedRecordForWrite(readDb, option);
   const fallback = buildFallbackManagedMetadata(option);
   const source: ManagedOptionRecord['source'] = existing ? existing.source : fallback.source;
   const createdAt = existing ? existing.createdAt : fallback.createdAt;
@@ -491,7 +515,11 @@ export async function deleteSharedOption(
     description: option.description || '',
   }, source, createdAt, now, true);
 
-  await db.collection(CLOUD_COLLECTIONS.customOptions).doc(tombstone._id as string).set({ data: tombstone });
+  if (db) {
+    await db.collection(CLOUD_COLLECTIONS.customOptions).doc(tombstone._id as string).set({ data: tombstone });
+  } else {
+    await callManageOptionsFunction('deleteOption', { record: tombstone });
+  }
   await enqueueCatalogCacheMutation(latest => replaceManagedRecord(latest, tombstone));
   return tombstone;
 }
@@ -499,7 +527,7 @@ export async function deleteSharedOption(
 export async function saveSharedGroupOrders(
   categoryId: string,
   groups: SharedGroupOrderInput[],
-  db = getCloudDb()
+  db?: DB.Database
 ): Promise<GroupOrderRecord[]> {
   const normalizedCategoryId = trimText(categoryId);
   const presetCategory = getPresetCategory(normalizedCategoryId);
@@ -534,17 +562,21 @@ export async function saveSharedGroupOrders(
     updatedAt: now,
   }));
 
-  const runTransaction = (db as any).runTransaction;
-  if (typeof runTransaction !== 'function') {
-    throw createServiceError('transaction_unsupported', '共享标签顺序保存失败：当前环境不支持事务');
-  }
-
-  await runTransaction.call(db, async (transaction: any) => {
-    const txCollection = transaction.collection(CLOUD_COLLECTIONS.customOptions);
-    for (const record of records) {
-      await txCollection.doc(record._id).set({ data: record });
+  if (db) {
+    const runTransaction = (db as any).runTransaction;
+    if (typeof runTransaction !== 'function') {
+      throw createServiceError('transaction_unsupported', '共享标签顺序保存失败：当前环境不支持事务');
     }
-  });
+
+    await runTransaction.call(db, async (transaction: any) => {
+      const txCollection = transaction.collection(CLOUD_COLLECTIONS.customOptions);
+      for (const record of records) {
+        await txCollection.doc(record._id).set({ data: record });
+      }
+    });
+  } else {
+    await callManageOptionsFunction('saveGroupOrders', { records });
+  }
 
   await enqueueCatalogCacheMutation(latest => replaceOrderRecords(latest, records));
   return records;

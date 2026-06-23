@@ -1,13 +1,18 @@
 import { Category } from '../../data/categories';
-import { listCustomOptions, upsertCustomOptions } from '../../services/customOptions';
+import { createSharedOption, listOptionCatalogRecords } from '../../services/customOptions';
 import { getDiaryByDate, saveDiary, uploadDiaryPhotos } from '../../services/diaries';
 import { DiaryDraft, DiaryRecord, MOODS, MoodId } from '../../types/diary';
-import { mergeCustomOptions } from '../../utils/categoryOptions';
+import { buildCatalog } from '../../utils/optionCatalog';
 import { clearDiaryDraft, readDiaryDraft, saveDiaryDraft } from '../../utils/diaryDraft';
 import {
+  EditableTagCategory,
+  EditableTagGroup,
   EditableRecognizedTag,
+  isDiaryCandidateTagSyncError,
   prepareEditableDiaryTags,
+  syncDiaryCandidateTags,
   updateEditableDiaryTagCategory,
+  updateEditableDiaryTagGroup,
   updateEditableDiaryTagName,
 } from '../../utils/diaryTagEditing';
 import { recognizeDiaryTagsForDiary } from '../../utils/diaryTags';
@@ -23,6 +28,17 @@ import {
 
 let draftSaveTimer: number | null = null;
 
+interface TagPanelCategory extends EditableTagCategory {
+  groups: EditableTagGroup[];
+}
+
+interface TagPanelTag extends EditableRecognizedTag {
+  categoryIndex: number;
+  groupIndex: number;
+  groupNames: string[];
+  missingGroup: boolean;
+}
+
 function formatSaveError(error: unknown): string {
   if (error && typeof error === 'object') {
     const err = error as { errCode?: number; errMsg?: string; message?: string };
@@ -34,6 +50,51 @@ function formatSaveError(error: unknown): string {
     if (err.message) return err.message;
   }
   return String(error || '未知错误');
+}
+
+function buildTagPanelCategories(categories: Category[]): TagPanelCategory[] {
+  return categories.map(category => ({
+    id: category.id,
+    name: category.name,
+    groups: category.optionGroups.map(group => ({ id: group.id, title: group.title })),
+  }));
+}
+
+function decorateTagForPanel(
+  tag: EditableRecognizedTag,
+  categories: Category[],
+  tagCategories: TagPanelCategory[]
+): TagPanelTag {
+  const categoryIndex = Math.max(0, tagCategories.findIndex(category => category.id === tag.categoryId));
+  const category = categories.find(item => item.id === tag.categoryId);
+  const groups = category?.optionGroups || [];
+  const groupNames = groups.map(group => group.title);
+  const groupIndex = groups.findIndex(group => group.id === tag.groupId);
+  return {
+    ...tag,
+    categoryIndex,
+    groupIndex: groupIndex >= 0 ? groupIndex : 0,
+    groupNames,
+    missingGroup: tag.source === 'candidate' && groupIndex < 0,
+  };
+}
+
+function hasInvalidCandidateTag(tags: EditableRecognizedTag[], categories: Category[]): boolean {
+  return tags.some(tag => {
+    if (tag.source !== 'candidate') return false;
+    const category = categories.find(item => item.id === tag.categoryId);
+    return !category || !category.optionGroups.some(group => group.id === tag.groupId);
+  });
+}
+
+function buildTagPanelState(tags: EditableRecognizedTag[], categories: Category[]) {
+  const tagCategories = buildTagPanelCategories(categories);
+  return {
+    recognizedTags: tags.map(tag => decorateTagForPanel(tag, categories, tagCategories)),
+    tagCategories,
+    tagCategoryNames: tagCategories.map(category => category.name),
+    tagSaveDisabled: hasInvalidCandidateTag(tags, categories),
+  };
 }
 
 Component({
@@ -59,8 +120,11 @@ Component({
     moods: MOODS,
     tagPanelVisible: false,
     recognizedTags: [] as EditableRecognizedTag[],
-    tagCategories: [] as Array<{ id: string; name: string }>,
+    tagCatalog: [] as Category[],
+    tagCategories: [] as TagPanelCategory[],
     tagCategoryNames: [] as string[],
+    tagSaveDisabled: false,
+    tagSyncError: '',
     existingRecord: null as DiaryRecord | null,
     initialized: false,
   },
@@ -231,24 +295,32 @@ Component({
         wx.showToast({ title: '先写一点内容吧', icon: 'none' });
         return;
       }
-      const customOptions = await listCustomOptions();
-      const categories = mergeCustomOptions(customOptions);
-      const recognizedTags = prepareEditableDiaryTags(
-        recognizeDiaryTagsForDiary(this.data.content, this.data.location, categories)
-      );
-      const tagCategories = categories.map((cat: Category) => ({ id: cat.id, name: cat.name }));
-      this.setData({
-        recognizedTags,
-        tagCategories,
-        tagCategoryNames: tagCategories.map(cat => cat.name),
-        tagPanelVisible: true,
-      });
+      try {
+        const catalogRecords = await listOptionCatalogRecords();
+        const categories = buildCatalog(catalogRecords);
+        const recognizedTags = prepareEditableDiaryTags(
+          recognizeDiaryTagsForDiary(this.data.content, this.data.location, categories)
+        );
+        this.setData({
+          ...buildTagPanelState(recognizedTags, categories),
+          tagCatalog: categories,
+          tagPanelVisible: true,
+          tagSyncError: '',
+        });
+      } catch (e) {
+        console.warn('加载标签目录失败', e);
+        wx.showToast({ title: '标签目录加载失败', icon: 'none' });
+      }
     },
 
     onTagNameInput(e: WechatMiniprogram.Input) {
       const index = e.currentTarget.dataset.index as number;
       const name = e.detail.value;
-      this.setData({ recognizedTags: updateEditableDiaryTagName(this.data.recognizedTags, index, name) });
+      const recognizedTags = updateEditableDiaryTagName(this.data.recognizedTags, index, name, this.data.tagCatalog);
+      this.setData({
+        ...buildTagPanelState(recognizedTags, this.data.tagCatalog),
+        tagSyncError: '',
+      });
     },
 
     onTagCategoryChange(e: WechatMiniprogram.PickerChange) {
@@ -256,12 +328,38 @@ Component({
       const categoryIndex = Number(e.detail.value);
       const category = this.data.tagCategories[categoryIndex];
       if (!category) return;
-      this.setData({ recognizedTags: updateEditableDiaryTagCategory(this.data.recognizedTags, index, category) });
+      const recognizedTags = updateEditableDiaryTagCategory(this.data.recognizedTags, index, category, this.data.tagCatalog);
+      this.setData({
+        ...buildTagPanelState(recognizedTags, this.data.tagCatalog),
+        tagSyncError: '',
+      });
+    },
+
+    onTagGroupChange(e: WechatMiniprogram.PickerChange) {
+      const index = e.currentTarget.dataset.index as number;
+      const groupIndex = Number(e.detail.value);
+      const tag = this.data.recognizedTags[index];
+      if (!tag) return;
+      const category = this.data.tagCatalog.find(item => item.id === tag.categoryId);
+      const group = category?.optionGroups[groupIndex];
+      if (!group) return;
+      const recognizedTags = updateEditableDiaryTagGroup(this.data.recognizedTags, index, {
+        id: group.id,
+        title: group.title,
+      });
+      this.setData({
+        ...buildTagPanelState(recognizedTags, this.data.tagCatalog),
+        tagSyncError: '',
+      });
     },
 
     removeTag(e: WechatMiniprogram.TouchEvent) {
       const index = e.currentTarget.dataset.index as number;
-      this.setData({ recognizedTags: this.data.recognizedTags.filter((_, i) => i !== index) });
+      const recognizedTags = this.data.recognizedTags.filter((_, i) => i !== index);
+      this.setData({
+        ...buildTagPanelState(recognizedTags, this.data.tagCatalog),
+        tagSyncError: '',
+      });
     },
 
     closeTagPanel() {
@@ -281,14 +379,38 @@ Component({
     },
 
     async confirmSave() {
-      this.setData({ saving: true });
+      this.setData({ saving: true, tagSyncError: '' });
       try {
-        const candidateTags = this.data.recognizedTags.filter(tag => tag.source === 'candidate' && tag.name.trim());
+        let syncedTags: EditableRecognizedTag[];
         try {
-          await upsertCustomOptions(candidateTags.map(tag => ({ categoryId: tag.categoryId, name: tag.name })));
+          syncedTags = await syncDiaryCandidateTags(this.data.recognizedTags, this.data.tagCatalog, createSharedOption);
         } catch (tagError) {
-          console.warn('同步日记新标签失败，将继续保存日记', tagError);
+          const message = `新标签同步失败：${formatSaveError(tagError)}`;
+          console.warn('同步日记新标签失败，已阻止保存日记', tagError);
+          if (isDiaryCandidateTagSyncError(tagError)) {
+            this.setData({
+              ...buildTagPanelState(tagError.syncedTags, tagError.categories),
+              tagCatalog: tagError.categories,
+              saving: false,
+              tagPanelVisible: true,
+              tagSyncError: message,
+            });
+          } else {
+            this.setData({
+              saving: false,
+              tagPanelVisible: true,
+              tagSyncError: message,
+            });
+          }
+          wx.showModal({
+            title: '新标签同步失败',
+            content: `没有上传照片，也没有保存日记。请检查候选标签分类后重试。\n\n错误：${formatSaveError(tagError)}`,
+            showCancel: false,
+            confirmText: '知道了',
+          });
+          return;
         }
+        this.setData(buildTagPanelState(syncedTags, this.data.tagCatalog));
         const uploadedFileIds = await uploadDiaryPhotos(this.data.date, this.data.localPhotoPaths);
         const photoFileIds = this.keepUploadedPhotosInDraft(uploadedFileIds);
         const date = this.data.date;
@@ -301,7 +423,7 @@ Component({
           moods: this.data.selectedMoodIds,
           location: this.data.location.trim(),
           photoFileIds,
-          tags: this.data.recognizedTags
+          tags: syncedTags
             .filter(tag => tag.name.trim())
             .map(tag => ({
               categoryId: tag.categoryId,
@@ -314,6 +436,7 @@ Component({
         };
         await saveDiary(record);
         clearDiaryDraft(this.data.date);
+        this.setData({ tagPanelVisible: false });
         wx.showToast({ title: '日记已保存', icon: 'success' });
         setTimeout(() => {
           if (getCurrentPages().length > 1) {
@@ -331,7 +454,7 @@ Component({
           confirmText: '知道了',
         });
       } finally {
-        this.setData({ saving: false, tagPanelVisible: false });
+        this.setData({ saving: false });
       }
     },
   },

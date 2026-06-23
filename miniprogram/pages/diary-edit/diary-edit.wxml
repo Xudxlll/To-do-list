@@ -54,16 +54,26 @@
     <view class="tag-title">确认自动识别的标签</view>
     <view wx:if="{{recognizedTags.length === 0}}" class="tag-empty">没有识别到标签，可以直接保存。</view>
     <view wx:for="{{recognizedTags}}" wx:key="editKey" wx:for-index="index" class="tag-edit-row">
-      <view class="tag-category">{{item.categoryName}}</view>
+      <view wx:if="{{item.source !== 'candidate'}}" class="tag-fixed-meta">
+        <view class="tag-category">{{item.categoryName}}</view>
+        <view class="tag-group">{{item.groupName}}</view>
+      </view>
+      <view wx:else class="tag-candidate-meta">
+        <picker mode="selector" range="{{tagCategoryNames}}" value="{{item.categoryIndex}}" bindchange="onTagCategoryChange" data-index="{{index}}">
+          <view class="tag-picker">{{item.categoryName}}</view>
+        </picker>
+        <picker mode="selector" range="{{item.groupNames}}" value="{{item.groupIndex}}" bindchange="onTagGroupChange" data-index="{{index}}">
+          <view class="tag-picker {{item.missingGroup ? 'is-missing' : ''}}">{{item.groupName || '选子分类'}}</view>
+        </picker>
+      </view>
       <input class="tag-name-input" value="{{item.name}}" disabled="{{!item.editable}}" bindinput="onTagNameInput" data-index="{{index}}" />
-      <picker wx:if="{{item.editable}}" mode="selector" range="{{tagCategoryNames}}" bindchange="onTagCategoryChange" data-index="{{index}}">
-        <view class="tag-switch">换分类</view>
-      </picker>
       <view class="tag-remove" bind:tap="removeTag" data-index="{{index}}">删除</view>
     </view>
+    <view wx:if="{{tagSaveDisabled}}" class="tag-warning">新标签需要先选择子分类。</view>
+    <view wx:if="{{tagSyncError}}" class="tag-warning">{{tagSyncError}}</view>
     <view class="tag-actions">
       <button class="cancel-btn" bind:tap="closeTagPanel">再改改</button>
-      <button class="confirm-btn" bind:tap="confirmSave">确认保存</button>
+      <button class="confirm-btn {{saving || tagSaveDisabled ? 'btn-disabled' : ''}}" disabled="{{saving || tagSaveDisabled}}" bind:tap="confirmSave">确认保存</button>
     </view>
   </view>
 </view>

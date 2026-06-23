@@ -64,5 +64,7 @@ export interface CalendarDay {
 export interface RecognizedTag extends DiaryTag {
   source: 'preset' | 'custom' | 'candidate';
   categoryName: string;
+  groupId: string;
+  groupName: string;
   editable: boolean;
 }

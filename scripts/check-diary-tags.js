@@ -20,6 +20,7 @@ function assert(condition, message) {
 }
 
 const { CATEGORIES } = require('../miniprogram/data/categories.ts');
+const { buildCatalog } = require('../miniprogram/utils/optionCatalog.ts');
 const { recognizeDiaryTags, recognizeDiaryTagsForDiary } = require('../miniprogram/utils/diaryTags.ts');
 
 const tags = recognizeDiaryTags('今天吃了火锅烤肉，去商场逛街了', CATEGORIES);
@@ -76,6 +77,36 @@ assert(
 assert(
   !movieTags.some(tag => tag.categoryId === 'home' && tag.name === '看电影'),
   '看电影不应同时重复识别到宅家模式'
+);
+
+const catalog = buildCatalog([]);
+const eatCategory = catalog.find(category => category.id === 'eat');
+const existing = eatCategory.options.find(option => option.name === '湘菜');
+const existingGroup = eatCategory.optionGroups.find(group => group.id === existing.groupId);
+const matched = recognizeDiaryTagsForDiary('晚上去吃湘菜', '', catalog);
+assert(matched[0].optionId === existing.id && matched[0].source !== 'candidate', '已有标签应复用稳定 ID');
+assert(matched[0].groupId === existing.groupId, '已有标签应携带当前子分类 ID');
+assert(matched[0].groupName === existingGroup.title, '已有标签应携带当前子分类名称');
+
+const deletedCatalog = buildCatalog([
+  {
+    recordType: 'option',
+    optionId: existing.id,
+    categoryId: 'eat',
+    groupId: existing.groupId,
+    source: 'preset',
+    name: existing.name,
+    normalizedName: '湘菜',
+    description: '',
+    deleted: true,
+    createdAt: 1,
+    updatedAt: 2,
+  },
+]);
+const deletedMatches = recognizeDiaryTagsForDiary('晚上去吃湘菜', '', deletedCatalog);
+assert(
+  !deletedMatches.some(tag => tag.optionId === existing.id && tag.source !== 'candidate'),
+  '已删除选项不应通过最终目录继续命中旧稳定 ID'
 );
 
 console.log('diary tag checks passed');

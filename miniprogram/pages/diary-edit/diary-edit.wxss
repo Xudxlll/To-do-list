@@ -225,10 +225,46 @@
   gap: 12rpx;
 }
 
+.tag-fixed-meta,
+.tag-candidate-meta {
+  width: 184rpx;
+  flex-shrink: 0;
+}
+
 .tag-category {
-  width: 150rpx;
   color: #B77986;
   font-size: 24rpx;
+}
+
+.tag-group {
+  margin-top: 4rpx;
+  color: #9A8A8D;
+  font-size: 22rpx;
+}
+
+.tag-picker {
+  width: 100%;
+  min-height: 44rpx;
+  padding: 8rpx 12rpx;
+  box-sizing: border-box;
+  border-radius: 14rpx;
+  background: #FFF0F2;
+  color: #B77986;
+  font-size: 22rpx;
+  line-height: 28rpx;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tag-candidate-meta picker + picker {
+  margin-top: 8rpx;
+}
+
+.tag-picker.is-missing {
+  color: #FF6B81;
+  background: #FFF7F7;
+  border: 2rpx solid rgba(255, 107, 129, 0.28);
 }
 
 .tag-name-input {
@@ -239,14 +275,19 @@
   font-size: 26rpx;
 }
 
-.tag-switch {
-  color: #7BA7D1;
-  font-size: 24rpx;
-}
-
 .tag-remove {
   color: #FF6B81;
   font-size: 24rpx;
+}
+
+.tag-warning {
+  margin-top: 18rpx;
+  padding: 16rpx 18rpx;
+  border-radius: 18rpx;
+  background: #FFF7F7;
+  color: #D9576B;
+  font-size: 24rpx;
+  line-height: 1.45;
 }
 
 .tag-actions {
@@ -272,4 +313,9 @@
 .confirm-btn {
   color: #fff;
   background: #FF6B81;
+}
+
+.confirm-btn.btn-disabled {
+  color: #999;
+  background: #D9D9D9;
 }

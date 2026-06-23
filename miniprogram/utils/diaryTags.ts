@@ -1,6 +1,7 @@
 import { Category, Option } from '../data/categories';
 import { RecognizedTag } from '../types/diary';
-import { buildCustomOptionId, normalizeOptionName } from './categoryOptions';
+import { buildDiaryCandidateOptionId } from './diaryTagIds';
+import { normalizeOptionName } from './optionCatalog';
 
 interface CategoryRule {
   categoryId: string;
@@ -60,15 +61,35 @@ const CONFLICT_RULES = [
   { preferredCategoryId: 'watch', preferredName: '电影院', removeCategoryId: 'home', removeName: '看电影' },
 ];
 
-function optionToTag(category: Category, option: Option, source: 'preset' | 'custom'): RecognizedTag {
+function getOptionGroupName(category: Category, option: Option): string {
+  return category.optionGroups.find(group => group.id === option.groupId)?.title || '';
+}
+
+function optionToTag(category: Category, option: Option): RecognizedTag {
   return {
     categoryId: category.id,
     optionId: option.id,
     name: option.name,
-    isCustom: source === 'custom',
-    source,
+    isCustom: option.isCustom,
+    source: option.isCustom ? 'custom' : 'preset',
     categoryName: category.name,
+    groupId: option.groupId,
+    groupName: getOptionGroupName(category, option),
     editable: false,
+  };
+}
+
+function candidateToTag(category: Category, name: string, normalizedName: string): RecognizedTag {
+  return {
+    categoryId: category.id,
+    optionId: buildDiaryCandidateOptionId(category.id, normalizedName),
+    name,
+    isCustom: true,
+    source: 'candidate',
+    categoryName: category.name,
+    groupId: '',
+    groupName: '',
+    editable: true,
   };
 }
 
@@ -107,7 +128,7 @@ function addAliasTags(content: string, categories: Category[], tags: RecognizedT
     const category = categories.find(item => item.id === rule.categoryId);
     const option = category && category.options.find(item => item.name === rule.optionName);
     if (!category || !option) return;
-    tags.push(optionToTag(category, option, option.id.indexOf('cloud_') === 0 ? 'custom' : 'preset'));
+    tags.push(optionToTag(category, option));
   });
 }
 
@@ -119,15 +140,7 @@ function addGenericTags(content: string, categories: Category[], tags: Recognize
     if (!category) return;
     const normalizedName = normalizeOptionName(rule.name);
     if (isCoveredByExistingTags(rule.name, tags)) return;
-    tags.push({
-      categoryId: category.id,
-      optionId: buildCustomOptionId(category.id, normalizedName),
-      name: rule.name,
-      isCustom: true,
-      source: 'candidate',
-      categoryName: category.name,
-      editable: true,
-    });
+    tags.push(candidateToTag(category, rule.name, normalizedName));
   });
 }
 
@@ -174,7 +187,7 @@ export function recognizeDiaryTags(content: string, categories: Category[], opti
     if (!allowCategory(category.id, options)) return;
     category.options.forEach(option => {
       if (option.name && trimmed.indexOf(option.name) >= 0) {
-        tags.push(optionToTag(category, option, option.id.indexOf('cloud_') === 0 ? 'custom' : 'preset'));
+        tags.push(optionToTag(category, option));
       }
     });
   });
@@ -193,15 +206,7 @@ export function recognizeDiaryTags(content: string, categories: Category[], opti
       const exists = category.options.some(option => normalizeOptionName(option.name) === normalizedName);
       if (exists) return;
       if (isCoveredByExistingTags(candidateName, tags)) return;
-      tags.push({
-        categoryId: category.id,
-        optionId: buildCustomOptionId(category.id, normalizedName),
-        name: candidateName,
-        isCustom: true,
-        source: 'candidate',
-        categoryName: category.name,
-        editable: true,
-      });
+      tags.push(candidateToTag(category, candidateName, normalizedName));
     });
   });
 
@@ -225,17 +230,9 @@ function recognizeLocationTag(location: string, categories: Category[]): Recogni
   if (!category) return [];
   const normalizedName = normalizeOptionName(name);
   const option = category.options.find(item => normalizeOptionName(item.name) === normalizedName);
-  if (option) return [optionToTag(category, option, option.id.indexOf('cloud_') === 0 ? 'custom' : 'preset')];
+  if (option) return [optionToTag(category, option)];
 
-  return [{
-    categoryId: category.id,
-    optionId: buildCustomOptionId(category.id, normalizedName),
-    name,
-    isCustom: true,
-    source: 'candidate',
-    categoryName: category.name,
-    editable: true,
-  }];
+  return [candidateToTag(category, name, normalizedName)];
 }
 
 export function recognizeDiaryTagsForDiary(content: string, location: string, categories: Category[]): RecognizedTag[] {

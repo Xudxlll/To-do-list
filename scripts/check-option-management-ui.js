@@ -179,12 +179,19 @@ assert(/☰|≡/.test(wxmlSource), 'WXML 拖拽手柄应使用熟悉的排序符
 });
 
 [
-  'touch-action',
   'pointer-events',
   'max-width',
   'z-index',
 ].forEach(token => {
   assertIncludes(wxssSource, token, `WXSS 拖拽样式必须包含 ${token}`);
+});
+
+[
+  'touch-action',
+  'outline-offset',
+  'inset:',
+].forEach(token => {
+  assertNotIncludes(wxssSource, token, `WXSS 不应包含 Skyline 不支持属性 ${token}`);
 });
 
 [

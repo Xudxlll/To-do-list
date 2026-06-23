@@ -729,6 +729,64 @@ async function main() {
   assert.equal(service.readOptionCatalogCache().some(record => record.recordType === 'option' && record.optionId === createdA.id), true, '并发创建后 cache 应保留第一条');
   assert.equal(service.readOptionCatalogCache().some(record => record.recordType === 'option' && record.optionId === createdB.id), true, '并发创建后 cache 应保留第二条');
 
+  const staleCreateDb = new FakeDb({
+    [COLLECTION_NAME]: [
+      makeManagedRecord(50, {
+        optionId: 'option_remote_duplicate',
+        categoryId: 'eat',
+        groupId: 'cuisine',
+        name: '云端同名',
+        normalizedName: '云端同名',
+        deleted: false,
+      }),
+    ],
+  });
+  await assert.rejects(
+    () => service.createSharedOption(
+      { categoryId: 'eat', groupId: 'cuisine', name: '云端同名', description: '' },
+      CATEGORIES,
+      staleCreateDb,
+      { now: 200, randomPart: 'dup' }
+    ),
+    error => error.code === 'duplicate',
+    '云端已有同名有效选项时，即使本地目录陈旧也应拒绝新增'
+  );
+  assert.equal(getCollection(staleCreateDb).docSetCalls.length, 0, '云端重名新增失败时不应写入 managed 文档');
+
+  const staleUpdateDb = new FakeDb({
+    [COLLECTION_NAME]: [
+      makeManagedRecord(51, {
+        _id: buildManagedDocId('option_update_self'),
+        optionId: 'option_update_self',
+        categoryId: 'eat',
+        groupId: 'cuisine',
+        source: 'custom',
+        name: '原标签',
+        normalizedName: '原标签',
+      }),
+      makeManagedRecord(52, {
+        _id: buildManagedDocId('option_update_duplicate'),
+        optionId: 'option_update_duplicate',
+        categoryId: 'eat',
+        groupId: 'cuisine',
+        source: 'custom',
+        name: '云端编辑同名',
+        normalizedName: '云端编辑同名',
+      }),
+    ],
+  });
+  await assert.rejects(
+    () => service.updateSharedOption(
+      { id: 'option_update_self', groupId: 'cuisine', name: '原标签', emoji: '', isCustom: true, canDelete: true },
+      { categoryId: 'eat', groupId: 'cuisine', name: '云端编辑同名', description: '' },
+      CATEGORIES,
+      staleUpdateDb
+    ),
+    error => error.code === 'duplicate',
+    '云端已有同名有效选项时，即使本地目录陈旧也应拒绝编辑'
+  );
+  assert.equal(getCollection(staleUpdateDb).docSetCalls.length, 0, '云端重名编辑失败时不应写入 managed 文档');
+
   const failingDb = new FakeDb({ [COLLECTION_NAME]: pageRecords });
   getCollection(failingDb).failOnSkip.add(20);
   service.saveOptionCatalogCache([makeManagedRecord(2, { _id: 'old_cache', optionId: 'option_old_cache' })]);

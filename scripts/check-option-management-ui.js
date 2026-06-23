@@ -782,6 +782,30 @@ async function runSaveEditorToastBehaviorTest() {
   assert.equal(toastCalls.at(-1)?.title, '已添加', '新增保存成功后应提示已添加');
 }
 
+async function runCloseEditorKeepsSavingDraftTest() {
+  const config = loadComponentConfig();
+  const instance = createInstance(config);
+  seedCatalogState(instance, { categoryId: 'eat' });
+
+  instance.setData({
+    editorVisible: true,
+    editorMode: 'create',
+    editorCategoryId: 'eat',
+    editorCategoryName: '今天吃什么',
+    editorGroupId: 'cuisine',
+    editorGroupName: '主食',
+    editorName: '不要丢',
+    editorDescription: '保存中点击遮罩也要保留',
+    editorSaving: true,
+  });
+
+  instance.closeOptionEditor({ type: 'tap' });
+
+  assert.equal(instance.data.editorVisible, true, '保存中点击遮罩或关闭事件不应关闭编辑器');
+  assert.equal(instance.data.editorName, '不要丢', '保存中误触关闭不应清空名称');
+  assert.equal(instance.data.editorDescription, '保存中点击遮罩也要保留', '保存中误触关闭不应清空描述');
+}
+
 async function runNormalSearchTapBehaviorTest() {
   const config = loadComponentConfig();
   const instance = createInstance(config);
@@ -1196,6 +1220,7 @@ async function main() {
   await runNormalSearchTapBehaviorTest();
   await runShowReadsCacheBehaviorTest();
   await runSaveEditorToastBehaviorTest();
+  await runCloseEditorKeepsSavingDraftTest();
   await runInvalidDragEndDoesNotPersistTest();
   await runDragStartReentryPreservesSnapshotTest();
   await runSameGroupDragPersistsOrderTest();

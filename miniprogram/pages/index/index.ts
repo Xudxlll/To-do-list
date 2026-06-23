@@ -980,8 +980,9 @@ Component({
       });
     },
 
-    closeOptionEditor(force = false) {
-      if ((this.data.editorSaving || this.isDragBusy()) && !force) return;
+    closeOptionEditor(force: boolean | WechatMiniprogram.TouchEvent = false) {
+      const shouldForceClose = force === true;
+      if ((this.data.editorSaving || this.isDragBusy()) && !shouldForceClose) return;
       this.setData({
         editorVisible: false,
         editorMode: 'create',

@@ -358,6 +358,38 @@ function buildOptionFromManagedRecord(record: ManagedOptionRecord): Option {
   };
 }
 
+function buildLegacyOptionId(categoryId: string, normalizedName: string): string {
+  return `cloud_${categoryId}_${normalizedName}`;
+}
+
+function isDuplicateRecord(record: LegacyCustomOptionRecord | ManagedOptionRecord, excludeOptionId?: string): boolean {
+  if ('recordType' in record) {
+    return !record.deleted && record.optionId !== excludeOptionId;
+  }
+  const legacyOptionId = buildLegacyOptionId(record.categoryId, record.normalizedName);
+  return legacyOptionId !== excludeOptionId;
+}
+
+async function assertNoLatestDuplicate(
+  db: DB.Database,
+  input: SharedOptionInput,
+  excludeOptionId?: string
+): Promise<void> {
+  const categoryId = trimText(input.categoryId);
+  const normalizedName = normalizeOptionName(input.name);
+  const res = await db.collection(CLOUD_COLLECTIONS.customOptions)
+    .where({ categoryId, normalizedName })
+    .limit(PAGE_SIZE)
+    .get();
+  const duplicate = (Array.isArray(res.data) ? res.data : [])
+    .map(raw => normalizeManagedRecord(raw) || normalizeLegacyRecord(raw))
+    .filter((record): record is LegacyCustomOptionRecord | ManagedOptionRecord => Boolean(record))
+    .some(record => isDuplicateRecord(record, excludeOptionId));
+  if (duplicate) {
+    throw createServiceError('duplicate', '共享标签保存失败：duplicate');
+  }
+}
+
 export function readOptionCatalogCache(): OptionCatalogRecord[] {
   const value = readStorageValue(OPTION_CATALOG_CACHE_KEY);
   if (!Array.isArray(value)) return [];
@@ -402,6 +434,7 @@ export async function createSharedOption(
   if (!validation.ok) {
     throw createServiceError(validation.code, `共享标签创建失败：${validation.code}`);
   }
+  await assertNoLatestDuplicate(db, input);
 
   const now = typeof idParts.now === 'number' && Number.isFinite(idParts.now) ? idParts.now : Date.now();
   const optionId = createStableOptionId(now, idParts.randomPart);
@@ -422,6 +455,7 @@ export async function updateSharedOption(
   if (!validation.ok) {
     throw createServiceError(validation.code, `共享标签更新失败：${validation.code}`);
   }
+  await assertNoLatestDuplicate(db, input, option.id);
 
   const existing = await resolveManagedRecordForWrite(db, option);
   const fallback = buildFallbackManagedMetadata(option);

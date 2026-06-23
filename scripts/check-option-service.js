@@ -475,12 +475,14 @@ async function main() {
   ];
   const legacyDb = new FakeDb({ [COLLECTION_NAME]: mixedLegacyAndManaged });
   setCloudDb(legacyDb);
-  const legacyOptions = await service.listCustomOptions();
-  assert.deepEqual(getCollection(legacyDb).skipCalls, [0, 20], '兼容入口也应该按 20 条分页读取');
-  assert.equal(legacyOptions.length, 23, '兼容入口应该返回完整 legacy 数据');
-  assert.equal(legacyOptions.every(record => !('recordType' in record)), true, '兼容入口不应返回 managed 记录');
-  assert.equal(legacyOptions.some(record => record.name === '不应出现'), false, 'managed 记录不应被假装成 legacy');
-  assert.deepEqual(service.readOptionCatalogCache().length, 24, '兼容入口调用后缓存应仍由完整 catalog 结果维护');
+  assert.equal(typeof service.listCustomOptions, 'undefined', '不应继续导出旧 listCustomOptions 兼容入口');
+  assert.equal(typeof service.upsertCustomOptions, 'undefined', '不应继续导出旧 upsertCustomOptions 兼容入口');
+  assert.equal(typeof service.deleteCustomOption, 'undefined', '不应继续导出旧 deleteCustomOption 兼容入口');
+  const legacyCatalogRecords = await service.listOptionCatalogRecords(legacyDb);
+  assert.deepEqual(getCollection(legacyDb).skipCalls, [0, 20], 'catalog 入口应该按 20 条分页读取 legacy 数据');
+  assert.equal(legacyCatalogRecords.filter(record => !('recordType' in record)).length, 23, 'catalog 入口应该继续返回完整 legacy 数据');
+  assert.equal(legacyCatalogRecords.some(record => 'recordType' in record && record.optionId === 'option_should_not_leak'), true, 'catalog 入口应同时保留 managed 记录');
+  assert.deepEqual(service.readOptionCatalogCache().length, 24, 'catalog 入口调用后缓存应由完整 catalog 结果维护');
 
   resetStorage();
   const coldManagedDocId = buildManagedDocId('option_cold');

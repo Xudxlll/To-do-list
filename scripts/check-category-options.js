@@ -1,5 +1,4 @@
 const fs = require('fs');
-const path = require('path');
 const ts = require('typescript');
 
 require.extensions['.ts'] = function registerTs(module, filename) {
@@ -19,7 +18,7 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
-const { mergeCustomOptions } = require('../miniprogram/utils/categoryOptions.ts');
+const categoryOptions = require('../miniprogram/utils/categoryOptions.ts');
 const { buildCatalog } = require('../miniprogram/utils/optionCatalog.ts');
 
 const records = [
@@ -41,7 +40,9 @@ function assertMergedOption(categories, sourceName) {
   assert(option.canDelete === true, `${sourceName} 合并的云端自定义标签应该可以删除`);
 }
 
-assertMergedOption(mergeCustomOptions(records), 'mergeCustomOptions');
+assert(typeof categoryOptions.mergeCustomOptions === 'undefined', 'categoryOptions 不应再保留重复 mergeCustomOptions 实现');
+assert(typeof categoryOptions.buildCustomOptionId === 'undefined', 'categoryOptions 不应再导出旧 buildCustomOptionId');
+assert(categoryOptions.normalizeOptionName('  A  B ') === 'ab', 'categoryOptions 可继续作为 normalizeOptionName 的安全兼容入口');
 assertMergedOption(buildCatalog(records), 'buildCatalog');
 
 console.log('category option checks passed');

@@ -8,15 +8,16 @@ import {
   OptionValidationInput,
   OptionValidationResult,
 } from '../types/options';
-import {
-  buildCustomOptionId,
-  normalizeOptionName as normalizeOptionNameFromCategoryOptions,
-} from './categoryOptions';
+import { normalizeOptionName as normalizeOptionNameFromCategoryOptions } from './categoryOptions';
 
 const OTHER_GROUP_ID = 'other';
 const OTHER_GROUP_TITLE = '其他';
 
 export const normalizeOptionName = normalizeOptionNameFromCategoryOptions;
+
+function buildLegacyOptionId(categoryId: string, normalizedName: string): string {
+  return `cloud_${categoryId}_${normalizedName}`;
+}
 
 function cloneOption(option: Option): Option {
   return { ...option };
@@ -305,7 +306,7 @@ function applyLegacyRecords(categories: Category[], records: LegacyCustomOptionR
       : normalizeOptionName(name);
     if (!findCategory(categories, record.categoryId) || !name || !normalizedName) return;
 
-    const optionId = buildCustomOptionId(record.categoryId, normalizedName);
+    const optionId = buildLegacyOptionId(record.categoryId, normalizedName);
     const preparedRecord = { record, name, normalizedName, optionId };
     const current = latestLegacyRecords.get(optionId);
     if (!current || comparePreparedLegacyRecords(preparedRecord, current) > 0) {

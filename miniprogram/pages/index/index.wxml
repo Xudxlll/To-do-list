@@ -162,8 +162,33 @@
 </view>
 
 <view class="bottom-bar">
-  <view class="count">已选 <em>{{totalCount}}</em> 项</view>
+  <view class="count count-tappable" bind:tap="openSelectedPanel">已选 <em>{{totalCount}}</em> 项</view>
   <button class="send-btn {{totalCount === 0 ? 'btn-disabled' : ''}}" disabled="{{totalCount === 0}}" open-type="share">发送给 TA 💌</button>
+</view>
+
+<view wx:if="{{selectedPanelVisible}}" class="selected-panel-overlay" catch:tap="closeSelectedPanel">
+  <view class="selected-panel" catch:tap="noop">
+    <view class="selected-panel-header">
+      <text class="selected-panel-title">已选清单</text>
+      <view class="selected-panel-close" bind:tap="closeSelectedPanel">✕</view>
+    </view>
+
+    <view wx:if="{{selectedItems.length === 0}}" class="selected-empty">还没有选择</view>
+    <scroll-view wx:else class="selected-list" scroll-y type="list" enhanced show-scrollbar="{{false}}">
+      <view
+        wx:for="{{selectedItems}}"
+        wx:key="optionId"
+        wx:for-item="selectedItem"
+        class="selected-chip"
+        catch:tap="onRemoveSelectedOption"
+        data-category-id="{{selectedItem.categoryId}}"
+        data-option-id="{{selectedItem.optionId}}"
+      >
+        <text class="selected-chip-name">{{selectedItem.optionName}}</text>
+        <text class="selected-chip-remove">×</text>
+      </view>
+    </scroll-view>
+  </view>
 </view>
 
 <view wx:if="{{editorVisible}}" class="editor-overlay" catch:tap="closeOptionEditor">

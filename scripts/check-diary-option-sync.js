@@ -81,7 +81,7 @@ async function main() {
     canDelete: true,
   }));
   assert(synced[0].optionId === 'option_synced', '同步成功后应替换为稳定 optionId');
-  assert(synced[0].source !== 'candidate' && !synced[0].editable, '同步成功后不应再保留候选态');
+  assert(synced[0].source !== 'candidate' && synced[0].editable, '同步成功后应退出候选态但仍允许继续修改');
 
   const firstGrouped = updateEditableDiaryTagGroup([candidate], 0, cuisineGroup)[0];
   const secondCandidate = updateEditableDiaryTagName([candidate], 0, '失败新菜馆', catalog)[0];

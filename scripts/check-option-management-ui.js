@@ -80,6 +80,9 @@ const wxssSource = readFile('miniprogram/pages/index/index.wxss');
   'dragY',
   'dragGhostName',
   'dragSaving',
+  'selectedPanelVisible',
+  'selectedGroups',
+  'selectedItems',
 ].forEach(name => {
   assertIncludes(tsSource, name, `index.ts data 必须包含 ${name}`);
 });
@@ -96,6 +99,9 @@ const wxssSource = readFile('miniprogram/pages/index/index.wxss');
   'onOptionDragMove',
   'onOptionDragEnd',
   'onOptionDragCancel',
+  'openSelectedPanel',
+  'closeSelectedPanel',
+  'onRemoveSelectedOption',
 ].forEach(name => {
   assertIncludes(tsSource, name, `index.ts 必须实现 ${name}`);
 });
@@ -185,6 +191,21 @@ assert(/☰|≡/.test(wxmlSource), 'WXML 拖拽手柄应使用熟悉的排序符
 
 assert(/\.search-icon[\s\S]*font-size:\s*32rpx/.test(wxssSource), 'WXSS 搜索图标应比正文更明显');
 assert(/\.editor-input[\s\S]*height:\s*88rpx/.test(wxssSource), 'WXSS 名称输入框应有足够高度');
+assert(/bind:tap="openSelectedPanel"/.test(wxmlSource), 'WXML 已选计数必须能点击打开已选面板');
+assert(/selectedPanelVisible/.test(wxmlSource), 'WXML 必须包含已选面板显示状态');
+assert(/catch:tap="onRemoveSelectedOption"/.test(wxmlSource), 'WXML 已选面板必须支持点击移除已选项');
+assert(/selectedItems\.length === 0/.test(wxmlSource), 'WXML 已选面板空状态必须跟 selectedItems 保持同源');
+assert(/wx:for="{{selectedItems}}"/.test(wxmlSource), 'WXML 已选面板必须直接渲染扁平 selectedItems');
+assert(/<scroll-view wx:else class="selected-list"[\s\S]*scroll-y/.test(wxmlSource), 'WXML 已选面板必须使用 scroll-view 支持长列表滑动');
+assert(!/selected-chip-meta/.test(wxmlSource), 'WXML 已选面板不应显示主分类或子分类');
+assert(/selectedItem\.optionName/.test(wxmlSource), 'WXML 已选面板只需要显示选项名称');
+assert(/\.selected-panel-overlay/.test(wxssSource), 'WXSS 必须包含已选面板遮罩样式');
+assert(/\.selected-chip/.test(wxssSource), 'WXSS 必须包含已选项 chip 样式');
+assert(/\.selected-panel[\s\S]*height:\s*78vh/.test(wxssSource), 'WXSS 已选面板高度应足够展示内容');
+assert(/\.selected-list[\s\S]*flex-direction:\s*column/.test(wxssSource), 'WXSS 已选列表应按行展示');
+assert(/\.selected-list[\s\S]*height:\s*58vh/.test(wxssSource), 'WXSS 已选列表应限制高度并在内部滚动');
+assert(/\.selected-chip-name[\s\S]*white-space:\s*normal/.test(wxssSource), 'WXSS 已选项名称应完整换行展示');
+assert(!/\.selected-chip-name[\s\S]*text-overflow:\s*ellipsis/.test(wxssSource), 'WXSS 已选项名称不应省略');
 
 [
   'pointer-events',
@@ -703,7 +724,7 @@ function createInstance(config) {
 }
 
 function seedCatalogState(instance, overrides = {}) {
-  instance.renderCatalog(cacheCatalog, {
+  instance.renderCatalog(overrides.catalog || cacheCatalog, {
     categoryId: overrides.categoryId || 'play',
     collapsedGroups: overrides.collapsedGroups || {},
     searchQuery: overrides.searchQuery || '',
@@ -830,6 +851,62 @@ async function runSaveEditorToastBehaviorTest() {
   assert.equal(createCalls.length, 1, '新增活动时应调用 createSharedOption');
   assert.equal(updateCalls.length, 0, '新增活动时不应调用 updateSharedOption');
   assert.equal(toastCalls.at(-1)?.title, '已添加', '新增保存成功后应提示已添加');
+
+  toastCalls = [];
+  createCalls = [];
+  updateCalls = [];
+  const otherCatalog = clone(BASE_CATALOG);
+  otherCatalog[0].optionGroups.push({
+    id: 'other',
+    title: '其他',
+    options: [{
+      id: 'option_other_existing',
+      groupId: 'other',
+      name: '其他旧标签',
+      emoji: '',
+      isCustom: true,
+      canDelete: true,
+      description: '',
+    }],
+  });
+  otherCatalog[0].options = otherCatalog[0].optionGroups.flatMap(group => group.options);
+  seedCatalogState(instance, { categoryId: 'eat', catalog: otherCatalog });
+
+  instance.setData({
+    editorVisible: true,
+    editorMode: 'edit',
+    editingOptionId: 'option_other_existing',
+    editorCategoryId: 'eat',
+    editorGroupId: 'other',
+    editorName: '其他新名字',
+    editorDescription: '',
+  });
+
+  await instance.saveOptionEditor();
+
+  assert.equal(updateCalls.length, 1, '编辑 other 分组活动时应调用 updateSharedOption');
+  assert.equal(updateCalls[0].input.groupId, 'other', '编辑 other 分组活动时应保留 other 分组');
+  assert.equal(toastCalls.at(-1)?.title, '已更新', '编辑 other 分组保存成功后应提示已更新');
+
+  toastCalls = [];
+  createCalls = [];
+  updateCalls = [];
+
+  instance.setData({
+    editorVisible: true,
+    editorMode: 'create',
+    editingOptionId: '',
+    editorCategoryId: 'eat',
+    editorGroupId: 'other',
+    editorName: '其他新增标签',
+    editorDescription: '',
+  });
+
+  await instance.saveOptionEditor();
+
+  assert.equal(createCalls.length, 1, '新增 other 分组活动时应调用 createSharedOption');
+  assert.equal(createCalls[0].groupId, 'other', '新增 other 分组活动时应传入 other 分组');
+  assert.equal(toastCalls.at(-1)?.title, '已添加', '新增 other 分组保存成功后应提示已添加');
 }
 
 async function runCloseEditorKeepsSavingDraftTest() {
@@ -887,6 +964,62 @@ async function runNormalSearchTapBehaviorTest() {
   assert.equal(appMock.saveSelectionsCalls, 1, '普通态点击搜索结果后应保存 selections');
   assert.equal(instance.data.editorVisible, false, '普通态点击搜索结果不应打开编辑器');
   assert.equal(instance.data.scrollIntoView, 'option-hotpot', '普通态点击搜索结果后应定位到目标活动');
+}
+
+async function runSelectedPanelBehaviorTest() {
+  const config = loadComponentConfig();
+  const instance = createInstance(config);
+  const hotpot = clone(BASE_CATALOG[0].optionGroups[0].options[0]);
+  const bbq = clone(BASE_CATALOG[0].optionGroups[0].options[1]);
+  appMock.globalData.selections = {
+    eat: [hotpot, bbq],
+  };
+  seedCatalogState(instance, { categoryId: 'eat' });
+
+  instance.openSelectedPanel();
+
+  assert.equal(instance.data.selectedPanelVisible, true, '点击已选计数后应打开已选面板');
+  assert.equal(instance.data.selectedGroups.length, 1, '已选面板应按分类展示已选内容');
+  assert.equal(instance.data.selectedGroups[0].categoryName, '今天吃什么', '已选面板应展示分类名');
+  assert.deepEqual(instance.data.selectedGroups[0].options.map(option => option.name), ['火锅', '烤肉'], '已选面板应展示当前已选活动');
+  assert.deepEqual(instance.data.selectedItems.map(item => item.optionName), ['火锅', '烤肉'], '已选面板应提供可直接渲染的扁平列表');
+
+  instance.onRemoveSelectedOption({
+    currentTarget: {
+      dataset: {
+        categoryId: 'eat',
+        optionId: 'hotpot',
+      },
+    },
+  });
+
+  assert.deepEqual(appMock.globalData.selections, { eat: [bbq] }, '点击已选面板里的活动应从 selections 中移除');
+  assert.equal(appMock.saveSelectionsCalls, 1, '移除已选项后应保存 selections');
+  assert.equal(instance.data.totalCount, 1, '移除已选项后底部计数应同步更新');
+  assert.deepEqual(instance.data.selectedGroups[0].options.map(option => option.name), ['烤肉'], '移除后已选面板应同步刷新');
+  assert.deepEqual(instance.data.selectedItems.map(item => item.optionName), ['烤肉'], '移除后扁平已选列表应同步刷新');
+
+  instance.closeSelectedPanel();
+  assert.equal(instance.data.selectedPanelVisible, false, '关闭事件应隐藏已选面板');
+
+  instance.setData({
+    totalCount: 1,
+    selectedGroups: [{
+      categoryId: 'eat',
+      categoryName: '今天吃什么',
+      options: [bbq],
+    }],
+    selectedItems: [{
+      categoryId: 'eat',
+      categoryName: '今天吃什么',
+      optionId: 'bbq',
+      optionName: '烤肉',
+    }],
+  });
+  appMock.globalData.selections = {};
+  instance.openSelectedPanel();
+  assert.deepEqual(instance.data.selectedGroups[0].options.map(option => option.name), ['烤肉'], '打开已选面板时应优先保留页面已同步好的清单');
+  assert.deepEqual(instance.data.selectedItems.map(item => item.optionName), ['烤肉'], '打开已选面板时应优先保留页面已同步好的扁平清单');
 }
 
 async function runShowReadsCacheBehaviorTest() {
@@ -1287,6 +1420,7 @@ async function runInvalidDragEndRestoresCollapsedSnapshotTest() {
 async function main() {
   await runManageSearchTapBehaviorTest();
   await runNormalSearchTapBehaviorTest();
+  await runSelectedPanelBehaviorTest();
   await runShowReadsCacheBehaviorTest();
   await runPeriodicRefreshBehaviorTest();
   await runSaveEditorToastBehaviorTest();

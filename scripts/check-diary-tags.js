@@ -59,6 +59,43 @@ assert(
   '地点字段不能影响正文里的吃饭标签识别'
 );
 
+const multiLocationCatalog = buildCatalog([
+  {
+    recordType: 'option',
+    optionId: 'option_shekou_seaworld',
+    categoryId: 'goout',
+    groupId: 'citywalk',
+    source: 'custom',
+    name: '蛇口海上世界',
+    normalizedName: '蛇口海上世界',
+    description: '',
+    deleted: false,
+    createdAt: 1,
+    updatedAt: 1,
+  },
+  {
+    recordType: 'option',
+    optionId: 'option_k11',
+    categoryId: 'goout',
+    groupId: 'mall',
+    source: 'custom',
+    name: 'K11',
+    normalizedName: 'k11',
+    description: '',
+    deleted: false,
+    createdAt: 1,
+    updatedAt: 1,
+  },
+]);
+const multiLocationTags = recognizeDiaryTagsForDiary('今天吃了火锅', '海上世界，K11', multiLocationCatalog);
+const multiLocationNames = multiLocationTags.map(tag => tag.name);
+assert(multiLocationNames.includes('蛇口海上世界'), '地点里的“海上世界”应匹配已有“蛇口海上世界”标签');
+assert(multiLocationNames.includes('K11'), '地点里的多个地点应按分隔符拆开分别识别');
+assert(
+  !multiLocationNames.includes('海上世界，K11'),
+  '多个地点不应被识别成一个整体标签'
+);
+
 const contentOnlyGooutTags = recognizeDiaryTagsForDiary('今天去了深圳湾公园散步', '', CATEGORIES);
 assert(
   !contentOnlyGooutTags.some(tag => tag.categoryId === 'goout'),

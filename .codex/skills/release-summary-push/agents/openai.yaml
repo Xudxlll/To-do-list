@@ -1,0 +1,4 @@
+interface:
+  display_name: "Release Summary Push"
+  short_description: "总结项目改动、更新版本发布说明、验证并推送 GitHub"
+  default_prompt: "总结当前项目改动，更新版本发布说明，完成验证、提交、打标签并推送到 GitHub。"

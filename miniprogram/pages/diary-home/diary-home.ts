@@ -1,4 +1,4 @@
-import { listDiaryDatesByMonth, listRecentDiaries } from '../../services/diaries';
+import { listDiaryDatesByMonth, listRecentDiaries, resolveDiaryPhotoUrls } from '../../services/diaries';
 import { DiaryRecord, DiaryTimelineItem, MOODS } from '../../types/diary';
 import { monthKey, todayString } from '../../utils/date';
 import { normalizeMoodIds } from '../../utils/diaryMoods';
@@ -16,9 +16,19 @@ function buildTimelineItem(record: DiaryRecord): DiaryTimelineItem {
     ...record,
     summary: record.content.length > 42 ? `${record.content.slice(0, 42)}...` : record.content,
     coverFileId: record.photoFileIds[0] || '',
+    coverUrl: record.photoFileIds[0] || '',
     moodEmoji: moods.map(item => item.emoji).join(''),
     moodLabel: moods.map(item => item.label).join('、'),
   };
+}
+
+async function buildTimelineItems(records: DiaryRecord[]): Promise<DiaryTimelineItem[]> {
+  const timeline = records.map(buildTimelineItem);
+  const coverUrls = await resolveDiaryPhotoUrls(timeline.map(item => item.coverFileId));
+  return timeline.map((item, index) => ({
+    ...item,
+    coverUrl: coverUrls[index] || item.coverFileId,
+  }));
 }
 
 Component({
@@ -45,8 +55,9 @@ Component({
           listRecentDiaries(30),
           listDiaryDatesByMonth(this.data.currentMonth),
         ]);
+        const timeline = await buildTimelineItems(records);
         this.setData({
-          timeline: records.map(buildTimelineItem),
+          timeline,
           monthDiaryCount: dates.length,
           loading: false,
         });

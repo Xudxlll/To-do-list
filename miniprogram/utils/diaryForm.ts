@@ -3,6 +3,7 @@ export interface DiaryDraftFields {
   location: string;
   localPhotoPaths: string[];
   existingPhotoFileIds: string[];
+  existingPhotoUrls?: string[];
   mood?: string;
   selectedMoodIds?: string[];
   moodSelections?: Record<string, boolean>;
@@ -15,6 +16,7 @@ export function clearDiaryDraftFields<T extends DiaryDraftFields>(fields: T): T 
     location: '',
     localPhotoPaths: [],
     existingPhotoFileIds: [],
+    existingPhotoUrls: [],
     mood: '',
     selectedMoodIds: [],
     moodSelections: {},

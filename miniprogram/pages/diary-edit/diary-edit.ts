@@ -1,19 +1,24 @@
 import { Category } from '../../data/categories';
 import { createSharedOption, listOptionCatalogRecords } from '../../services/customOptions';
-import { getDiaryByDate, saveDiary, uploadDiaryPhotos } from '../../services/diaries';
+import { getDiaryByDate, resolveDiaryPhotoUrls, saveDiary, uploadDiaryPhotos } from '../../services/diaries';
 import { DiaryDraft, DiaryRecord, MOODS, MoodId } from '../../types/diary';
 import { buildCatalog } from '../../utils/optionCatalog';
 import { clearDiaryDraft, readDiaryDraft, saveDiaryDraft } from '../../utils/diaryDraft';
 import {
+  appendManualDiaryTag,
+  appendExistingDiaryTag,
   EditableTagCategory,
   EditableTagGroup,
   EditableRecognizedTag,
   isDiaryCandidateTagSyncError,
   prepareEditableDiaryTags,
+  prepareSavedDiaryTags,
+  searchDiaryTagOptions,
   syncDiaryCandidateTags,
   updateEditableDiaryTagCategory,
   updateEditableDiaryTagGroup,
   updateEditableDiaryTagName,
+  DiaryTagOptionSearchResult,
 } from '../../utils/diaryTagEditing';
 import { recognizeDiaryTagsForDiary } from '../../utils/diaryTags';
 import { formatDiaryDateLabel, isFutureDate, isSupportedDiaryDate, todayString } from '../../utils/date';
@@ -27,6 +32,9 @@ import {
 } from '../../utils/diaryMoods';
 
 let draftSaveTimer: number | null = null;
+const MAX_DIARY_PHOTOS = 9;
+const TAG_SEARCH_RESULT_ROW_HEIGHT = 96;
+const MAX_TAG_SEARCH_RESULTS_HEIGHT = 360;
 
 interface TagPanelCategory extends EditableTagCategory {
   groups: EditableTagGroup[];
@@ -97,6 +105,11 @@ function buildTagPanelState(tags: EditableRecognizedTag[], categories: Category[
   };
 }
 
+function getTagSearchResultsHeight(results: DiaryTagOptionSearchResult[]): number {
+  if (results.length === 0) return 0;
+  return Math.min(results.length * TAG_SEARCH_RESULT_ROW_HEIGHT, MAX_TAG_SEARCH_RESULTS_HEIGHT);
+}
+
 Component({
   lifetimes: {
     detached() {
@@ -112,20 +125,27 @@ Component({
     dateLabel: formatDiaryDateLabel(todayString()),
     loading: true,
     saving: false,
+    isEditing: true,
     content: '',
     ...getInitialMoodState(),
     location: '',
     localPhotoPaths: [] as string[],
     existingPhotoFileIds: [] as string[],
+    existingPhotoUrls: [] as string[],
     moods: MOODS,
     tagPanelVisible: false,
     recognizedTags: [] as EditableRecognizedTag[],
     tagCatalog: [] as Category[],
     tagCategories: [] as TagPanelCategory[],
     tagCategoryNames: [] as string[],
+    tagSearchQuery: '',
+    tagSearchResults: [] as DiaryTagOptionSearchResult[],
+    tagSearchResultsHeight: 0,
     tagSaveDisabled: false,
     tagSyncError: '',
     existingRecord: null as DiaryRecord | null,
+    diaryTags: [] as DiaryRecord['tags'],
+    MAX_DIARY_PHOTOS,
     initialized: false,
   },
 
@@ -153,18 +173,24 @@ Component({
         const useDraft = draft && (!record || draft.updatedAt > record.updatedAt);
         if (useDraft) {
           wx.showToast({ title: '已恢复本地草稿', icon: 'none' });
-          this.applyDraft(draft);
+          await this.applyDraft(draft);
+          this.setData({ isEditing: true });
         } else if (record) {
           const selectedMoodIds = normalizeMoodIds(record.moods, record.mood);
+          const existingPhotoFileIds = Array.isArray(record.photoFileIds) ? record.photoFileIds : [];
+          const existingPhotoUrls = await resolveDiaryPhotoUrls(existingPhotoFileIds);
           this.setData({
             existingRecord: record,
+            diaryTags: Array.isArray(record.tags) ? record.tags : [],
             content: record.content,
             mood: getPrimaryMoodId(selectedMoodIds),
             selectedMoodIds,
             moodSelections: buildMoodSelections(selectedMoodIds),
             location: record.location,
-            existingPhotoFileIds: record.photoFileIds,
+            existingPhotoFileIds,
+            existingPhotoUrls,
             localPhotoPaths: [],
+            isEditing: false,
           });
         }
         this.setData({ loading: false });
@@ -175,8 +201,14 @@ Component({
       }
     },
 
-    applyDraft(draft: DiaryDraft) {
+    startEditing() {
+      this.setData({ isEditing: true });
+    },
+
+    async applyDraft(draft: DiaryDraft) {
       const selectedMoodIds = normalizeMoodIds(draft.moods, draft.mood);
+      const existingPhotoFileIds = Array.isArray(draft.existingPhotoFileIds) ? draft.existingPhotoFileIds : [];
+      const existingPhotoUrls = await resolveDiaryPhotoUrls(existingPhotoFileIds);
       this.setData({
         content: draft.content,
         mood: getPrimaryMoodId(selectedMoodIds),
@@ -184,7 +216,8 @@ Component({
         moodSelections: buildMoodSelections(selectedMoodIds),
         location: draft.location,
         localPhotoPaths: draft.localPhotoPaths,
-        existingPhotoFileIds: draft.existingPhotoFileIds,
+        existingPhotoFileIds,
+        existingPhotoUrls,
       });
     },
 
@@ -232,9 +265,9 @@ Component({
 
     choosePhotos() {
       const currentCount = this.data.existingPhotoFileIds.length + this.data.localPhotoPaths.length;
-      const count = 3 - currentCount;
+      const count = MAX_DIARY_PHOTOS - currentCount;
       if (count <= 0) {
-        wx.showToast({ title: '最多 3 张照片', icon: 'none' });
+        wx.showToast({ title: '最多 9 张照片', icon: 'none' });
         return;
       }
       wx.chooseMedia({
@@ -252,7 +285,8 @@ Component({
     removeExistingPhoto(e: WechatMiniprogram.TouchEvent) {
       const index = e.currentTarget.dataset.index as number;
       const next = this.data.existingPhotoFileIds.filter((_, i) => i !== index);
-      this.setData({ existingPhotoFileIds: next });
+      const nextUrls = this.data.existingPhotoUrls.filter((_, i) => i !== index);
+      this.setData({ existingPhotoFileIds: next, existingPhotoUrls: nextUrls });
       this.persistDraft();
     },
 
@@ -280,6 +314,7 @@ Component({
             location: this.data.location,
             localPhotoPaths: this.data.localPhotoPaths,
             existingPhotoFileIds: this.data.existingPhotoFileIds,
+            existingPhotoUrls: this.data.existingPhotoUrls,
             mood: this.data.mood,
             selectedMoodIds: this.data.selectedMoodIds,
             moodSelections: this.data.moodSelections,
@@ -298,19 +333,81 @@ Component({
       try {
         const catalogRecords = await listOptionCatalogRecords();
         const categories = buildCatalog(catalogRecords);
+        const savedTags = this.data.existingRecord ? this.data.existingRecord.tags || [] : [];
+        const recognizedTags = this.data.existingRecord
+          ? prepareSavedDiaryTags(savedTags, categories)
+          : prepareEditableDiaryTags(
+            recognizeDiaryTagsForDiary(this.data.content, this.data.location, categories)
+          );
+        this.setData({
+          ...buildTagPanelState(recognizedTags, categories),
+          tagCatalog: categories,
+          tagPanelVisible: true,
+          tagSyncError: '',
+          tagSearchQuery: '',
+          tagSearchResults: [],
+          tagSearchResultsHeight: 0,
+        });
+      } catch (e) {
+        console.warn('加载标签目录失败', e);
+        wx.showToast({ title: '标签目录加载失败', icon: 'none' });
+      }
+    },
+
+    async rerunTagRecognition() {
+      if (this.data.saving) return;
+      try {
+        const categories = this.data.tagCatalog.length > 0
+          ? this.data.tagCatalog
+          : buildCatalog(await listOptionCatalogRecords());
         const recognizedTags = prepareEditableDiaryTags(
           recognizeDiaryTagsForDiary(this.data.content, this.data.location, categories)
         );
         this.setData({
           ...buildTagPanelState(recognizedTags, categories),
           tagCatalog: categories,
-          tagPanelVisible: true,
           tagSyncError: '',
+          tagSearchQuery: '',
+          tagSearchResults: [],
+          tagSearchResultsHeight: 0,
         });
       } catch (e) {
-        console.warn('加载标签目录失败', e);
-        wx.showToast({ title: '标签目录加载失败', icon: 'none' });
+        console.warn('重新识别标签失败', e);
+        wx.showToast({ title: '重新识别失败', icon: 'none' });
       }
+    },
+
+    addManualTag() {
+      if (this.data.saving) return;
+      const recognizedTags = appendManualDiaryTag(this.data.recognizedTags, this.data.tagCatalog);
+      this.setData({
+        ...buildTagPanelState(recognizedTags, this.data.tagCatalog),
+        tagSyncError: '',
+      });
+    },
+
+    onTagSearchInput(e: WechatMiniprogram.Input) {
+      const tagSearchQuery = e.detail.value || '';
+      const tagSearchResults = searchDiaryTagOptions(tagSearchQuery, this.data.tagCatalog, this.data.recognizedTags);
+      this.setData({
+        tagSearchQuery,
+        tagSearchResults,
+        tagSearchResultsHeight: getTagSearchResultsHeight(tagSearchResults),
+      });
+    },
+
+    addExistingTagFromSearch(e: WechatMiniprogram.TouchEvent) {
+      const index = e.currentTarget.dataset.index as number;
+      const matched = this.data.tagSearchResults[index];
+      if (!matched) return;
+      const recognizedTags = appendExistingDiaryTag(this.data.recognizedTags, matched);
+      const tagSearchResults = searchDiaryTagOptions(this.data.tagSearchQuery, this.data.tagCatalog, recognizedTags);
+      this.setData({
+        ...buildTagPanelState(recognizedTags, this.data.tagCatalog),
+        tagSearchResults,
+        tagSearchResultsHeight: getTagSearchResultsHeight(tagSearchResults),
+        tagSyncError: '',
+      });
     },
 
     onTagNameInput(e: WechatMiniprogram.Input) {
@@ -366,11 +463,13 @@ Component({
       this.setData({ tagPanelVisible: false });
     },
 
-    keepUploadedPhotosInDraft(uploadedFileIds: string[]): string[] {
-      const photoFileIds = this.data.existingPhotoFileIds.concat(uploadedFileIds).slice(0, 3);
+    async keepUploadedPhotosInDraft(uploadedFileIds: string[]): Promise<string[]> {
+      const photoFileIds = this.data.existingPhotoFileIds.concat(uploadedFileIds).slice(0, MAX_DIARY_PHOTOS);
       if (uploadedFileIds.length > 0) {
+        const existingPhotoUrls = await resolveDiaryPhotoUrls(photoFileIds);
         this.setData({
           existingPhotoFileIds: photoFileIds,
+          existingPhotoUrls,
           localPhotoPaths: [],
         });
         this.persistDraft();
@@ -412,7 +511,7 @@ Component({
         }
         this.setData(buildTagPanelState(syncedTags, this.data.tagCatalog));
         const uploadedFileIds = await uploadDiaryPhotos(this.data.date, this.data.localPhotoPaths);
-        const photoFileIds = this.keepUploadedPhotosInDraft(uploadedFileIds);
+        const photoFileIds = await this.keepUploadedPhotosInDraft(uploadedFileIds);
         const date = this.data.date;
         const now = Date.now();
         const record: DiaryRecord = {

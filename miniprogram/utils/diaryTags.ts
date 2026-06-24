@@ -61,6 +61,32 @@ const CONFLICT_RULES = [
   { preferredCategoryId: 'watch', preferredName: '电影院', removeCategoryId: 'home', removeName: '看电影' },
 ];
 
+function normalizeMatchText(value: string): string {
+  return normalizeOptionName(value).replace(/[\s,，、。.!！?？;；:：/\\|｜\-—_]+/g, '');
+}
+
+function scoreTextMatch(input: string, target: string): number {
+  const normalizedInput = normalizeMatchText(input);
+  const normalizedTarget = normalizeMatchText(target);
+  if (!normalizedInput || !normalizedTarget) return 0;
+  if (normalizedInput === normalizedTarget) return 100;
+  if (normalizedTarget.indexOf(normalizedInput) >= 0) {
+    return 80 - Math.max(0, normalizedTarget.length - normalizedInput.length);
+  }
+  if (normalizedInput.indexOf(normalizedTarget) >= 0) {
+    return 70 - Math.max(0, normalizedInput.length - normalizedTarget.length);
+  }
+  return 0;
+}
+
+function splitLocationText(location: string): string[] {
+  const normalized = location
+    .split(/[，,、;；/|｜\n\r\t]+/g)
+    .map(item => item.trim())
+    .filter(Boolean);
+  return Array.from(new Set(normalized));
+}
+
 function getOptionGroupName(category: Category, option: Option): string {
   return category.optionGroups.find(group => group.id === option.groupId)?.title || '';
 }
@@ -224,15 +250,21 @@ function maskLocationInContent(content: string, location: string): string {
 }
 
 function recognizeLocationTag(location: string, categories: Category[]): RecognizedTag[] {
-  const name = location.trim();
-  if (!name) return [];
   const category = categories.find(item => item.id === 'goout');
   if (!category) return [];
-  const normalizedName = normalizeOptionName(name);
-  const option = category.options.find(item => normalizeOptionName(item.name) === normalizedName);
-  if (option) return [optionToTag(category, option)];
-
-  return [candidateToTag(category, name, normalizedName)];
+  return splitLocationText(location).map(name => {
+    const normalizedName = normalizeOptionName(name);
+    const option = category.options
+      .map(item => ({ option: item, score: scoreTextMatch(name, item.name) }))
+      .filter(item => item.score > 0)
+      .sort((left, right) => (
+        right.score - left.score
+        || normalizeMatchText(left.option.name).length - normalizeMatchText(right.option.name).length
+        || left.option.name.localeCompare(right.option.name)
+      ))[0]?.option;
+    if (option) return optionToTag(category, option);
+    return candidateToTag(category, name, normalizedName);
+  });
 }
 
 export function recognizeDiaryTagsForDiary(content: string, location: string, categories: Category[]): RecognizedTag[] {

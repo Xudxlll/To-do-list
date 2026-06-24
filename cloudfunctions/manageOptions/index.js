@@ -6,13 +6,13 @@ const db = cloud.database();
 const COLLECTION_NAME = 'custom_options';
 const PAGE_SIZE = 100;
 const ALLOWED_GROUPS = {
-  eat: ['cuisine', 'hotpot', 'grill', 'snack', 'dessert', 'homecook'],
-  drink: ['milk_tea', 'special_tea', 'coffee', 'fresh', 'night'],
-  play: ['indoor', 'story', 'creative', 'pets', 'casual_play', 'shopping'],
-  goout: ['mall', 'park', 'sea', 'culture', 'mountain', 'citywalk'],
-  watch: ['cinema', 'series', 'anime', 'knowledge', 'live_show'],
-  sport: ['daily', 'ball', 'water', 'outdoor', 'recovery'],
-  home: ['cook', 'game', 'handmade', 'chores', 'rest'],
+  eat: ['cuisine', 'hotpot', 'grill', 'snack', 'dessert', 'homecook', 'other'],
+  drink: ['milk_tea', 'special_tea', 'coffee', 'fresh', 'night', 'other'],
+  play: ['indoor', 'story', 'creative', 'pets', 'casual_play', 'shopping', 'other'],
+  goout: ['mall', 'park', 'sea', 'culture', 'mountain', 'citywalk', 'other'],
+  watch: ['cinema', 'series', 'anime', 'knowledge', 'live_show', 'other'],
+  sport: ['daily', 'ball', 'water', 'outdoor', 'recovery', 'other'],
+  home: ['cook', 'game', 'handmade', 'chores', 'rest', 'other'],
 };
 
 function trimText(value) {
@@ -150,6 +150,39 @@ function isDuplicateCandidate(candidate, record) {
   return legacyId !== record.optionId;
 }
 
+function getDuplicateCandidateOptionId(candidate) {
+  if (candidate.recordType === 'option') return trimText(candidate.optionId);
+  return `cloud_${trimText(candidate.categoryId)}_${normalizeOptionName(candidate.normalizedName || candidate.name)}`;
+}
+
+function getDuplicateCandidateTime(candidate) {
+  if (candidate.recordType === 'option') {
+    const updatedAt = Number(candidate.updatedAt);
+    if (Number.isFinite(updatedAt)) return updatedAt;
+  }
+  const createdAt = Number(candidate.createdAt);
+  return Number.isFinite(createdAt) ? createdAt : 0;
+}
+
+function compareDuplicateCandidates(left, right) {
+  const timeDiff = getDuplicateCandidateTime(left) - getDuplicateCandidateTime(right);
+  if (timeDiff !== 0) return timeDiff;
+  return trimText(left._id).localeCompare(trimText(right._id));
+}
+
+function getLatestDuplicateCandidates(candidates) {
+  const latest = new Map();
+  candidates.forEach(candidate => {
+    const optionId = getDuplicateCandidateOptionId(candidate);
+    if (!optionId) return;
+    const current = latest.get(optionId);
+    if (!current || compareDuplicateCandidates(candidate, current) >= 0) {
+      latest.set(optionId, candidate);
+    }
+  });
+  return Array.from(latest.values());
+}
+
 function splitDocId(record) {
   const { _id, ...data } = record;
   return { id: _id, data };
@@ -157,6 +190,7 @@ function splitDocId(record) {
 
 async function assertNoDuplicate(record) {
   if (record.deleted) return;
+  const candidates = [];
   let skip = 0;
   while (true) {
     const res = await db.collection(COLLECTION_NAME)
@@ -168,11 +202,12 @@ async function assertNoDuplicate(record) {
       .limit(PAGE_SIZE)
       .get();
     const page = Array.isArray(res.data) ? res.data : [];
-    if (page.some(candidate => isDuplicateCandidate(candidate, record))) {
-      fail('duplicate', '这个活动已经存在了');
-    }
-    if (page.length < PAGE_SIZE) return;
+    candidates.push(...page);
+    if (page.length < PAGE_SIZE) break;
     skip += PAGE_SIZE;
+  }
+  if (getLatestDuplicateCandidates(candidates).some(candidate => isDuplicateCandidate(candidate, record))) {
+    fail('duplicate', '这个活动已经存在了');
   }
 }
 

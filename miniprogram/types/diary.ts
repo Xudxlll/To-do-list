@@ -48,6 +48,7 @@ export interface DiaryDraft {
 export interface DiaryTimelineItem extends DiaryRecord {
   summary: string;
   coverFileId: string;
+  coverUrl: string;
   moodEmoji: string;
   moodLabel: string;
 }

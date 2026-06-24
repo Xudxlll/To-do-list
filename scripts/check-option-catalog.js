@@ -438,4 +438,17 @@ const tombstonedLegacyCatalog = buildCatalog([
 ]);
 assert(countOption(tombstonedLegacyCatalog, legacyId) === 0, 'tombstone 必须删除所有同 ID legacy 副本且不得复活');
 
+const otherInputCatalog = buildCatalog([{
+  recordType: 'option', optionId: 'option_other_saved',
+  categoryId: 'eat', groupId: 'other', source: 'custom', name: '其他分组新增',
+  normalizedName: '其他分组新增', description: '', deleted: false, createdAt: 1, updatedAt: 2,
+}]);
+assert(validateOptionInput(otherInputCatalog, {
+  categoryId: 'eat',
+  groupId: 'other',
+  name: '其他分组编辑后',
+  description: '',
+}).ok === true, 'other 分组应允许新增和编辑输入');
+assert(countOption(otherInputCatalog, 'option_other_saved') === 1, 'other 分组的 managed 记录应能合并进目录');
+
 console.log('option catalog checks passed');

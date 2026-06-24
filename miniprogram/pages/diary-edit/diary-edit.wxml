@@ -6,71 +6,146 @@
   <block wx:else>
     <view class="date-card">{{dateLabel}}</view>
 
-    <view class="section-card">
-      <view class="section-title">今天的心情 <text class="section-hint">可多选</text></view>
-      <view class="mood-row">
-        <view wx:for="{{moods}}" wx:key="id" class="mood-item {{moodSelections[item.id] ? 'active' : ''}}" bind:tap="onMoodTap" data-id="{{item.id}}">
-          <view class="mood-emoji">{{item.emoji}}</view>
-          <view class="mood-label">{{item.label}}</view>
-          <view wx:if="{{moodSelections[item.id]}}" class="mood-check">✓</view>
+    <view wx:if="{{!isEditing}}" class="view-mode">
+      <view class="section-card">
+        <view class="section-title">今天的心情</view>
+        <view wx:if="{{selectedMoodIds.length === 0}}" class="view-empty">没有记录心情</view>
+        <view wx:else class="mood-row view-mood-row">
+          <block wx:for="{{moods}}" wx:key="id">
+            <view wx:if="{{moodSelections[item.id]}}" class="mood-item active view-mood-item">
+              <view class="mood-emoji">{{item.emoji}}</view>
+              <view class="mood-label">{{item.label}}</view>
+            </view>
+          </block>
         </view>
+      </view>
+
+      <view class="section-card">
+        <view class="section-title">今天发生了什么</view>
+        <view class="view-content">{{content}}</view>
+      </view>
+
+      <view class="section-card">
+        <view class="section-title">地点</view>
+        <view wx:if="{{location}}" class="view-location">{{location}}</view>
+        <view wx:else class="view-empty">没有记录地点</view>
+      </view>
+
+      <view class="section-card">
+        <view class="section-title">照片</view>
+        <view wx:if="{{existingPhotoUrls.length > 0}}" class="view-photo-grid">
+          <image wx:for="{{existingPhotoUrls}}" wx:key="*this" class="view-photo" src="{{item}}" mode="aspectFill" />
+        </view>
+        <view wx:else class="view-empty">没有照片</view>
+      </view>
+
+      <view class="section-card">
+        <view class="section-title">标签</view>
+        <view wx:if="{{diaryTags.length > 0}}" class="view-tag-row">
+          <text wx:for="{{diaryTags}}" wx:key="optionId" class="view-tag">{{item.name}}</text>
+        </view>
+        <view wx:else class="view-empty">没有标签</view>
+      </view>
+
+      <view class="view-actions">
+        <button class="edit-diary-btn" bind:tap="startEditing">修改日记</button>
       </view>
     </view>
 
-    <view class="section-card">
-      <view class="section-title">今天发生了什么</view>
-      <textarea class="content-input" value="{{content}}" maxlength="1000" placeholder="写下今天一起做了什么..." bindinput="onContentInput" />
-    </view>
-
-    <view class="section-card">
-      <view class="section-title">地点</view>
-      <input class="location-input" value="{{location}}" placeholder="比如：深圳湾公园" bindinput="onLocationInput" />
-    </view>
-
-    <view class="section-card">
-      <view class="section-title">照片（最多 3 张）</view>
-      <view class="photo-grid">
-        <view wx:for="{{existingPhotoFileIds}}" wx:key="*this" wx:for-index="index" class="photo-cell">
-          <image src="{{item}}" mode="aspectFill" />
-          <view class="remove-photo" catch:tap="removeExistingPhoto" data-index="{{index}}">×</view>
+    <view wx:else class="edit-form">
+      <view class="section-card">
+        <view class="section-title">今天的心情 <text class="section-hint">可多选</text></view>
+        <view class="mood-row">
+          <view wx:for="{{moods}}" wx:key="id" class="mood-item {{moodSelections[item.id] ? 'active' : ''}}" bind:tap="onMoodTap" data-id="{{item.id}}">
+            <view class="mood-emoji">{{item.emoji}}</view>
+            <view class="mood-label">{{item.label}}</view>
+            <view wx:if="{{moodSelections[item.id]}}" class="mood-check">✓</view>
+          </view>
         </view>
-        <view wx:for="{{localPhotoPaths}}" wx:key="*this" wx:for-index="index" class="photo-cell">
-          <image src="{{item}}" mode="aspectFill" />
-          <view class="remove-photo" catch:tap="removeLocalPhoto" data-index="{{index}}">×</view>
-        </view>
-        <view wx:if="{{existingPhotoFileIds.length + localPhotoPaths.length < 3}}" class="add-photo" bind:tap="choosePhotos">＋</view>
       </view>
-    </view>
 
-    <view class="save-row">
-      <button class="clear-draft-btn {{saving ? 'btn-disabled' : ''}}" disabled="{{saving}}" bind:tap="clearDraftContent">清空草稿</button>
-      <button class="save-btn {{saving ? 'btn-disabled' : ''}}" disabled="{{saving}}" bind:tap="onSaveTap">保存日记</button>
+      <view class="section-card">
+        <view class="section-title">今天发生了什么</view>
+        <textarea class="content-input" value="{{content}}" maxlength="1000" placeholder="写下今天一起做了什么..." bindinput="onContentInput" />
+      </view>
+
+      <view class="section-card">
+        <view class="section-title">地点</view>
+        <input class="location-input" value="{{location}}" placeholder="比如：深圳湾公园" bindinput="onLocationInput" />
+      </view>
+
+      <view class="section-card">
+        <view class="section-title">照片（最多 9 张）</view>
+        <view class="photo-grid">
+          <view wx:for="{{existingPhotoUrls}}" wx:key="*this" wx:for-index="index" class="photo-cell">
+            <image src="{{item}}" mode="aspectFill" />
+            <view class="remove-photo" catch:tap="removeExistingPhoto" data-index="{{index}}">×</view>
+          </view>
+          <view wx:for="{{localPhotoPaths}}" wx:key="*this" wx:for-index="index" class="photo-cell">
+            <image src="{{item}}" mode="aspectFill" />
+            <view class="remove-photo" catch:tap="removeLocalPhoto" data-index="{{index}}">×</view>
+          </view>
+          <view wx:if="{{existingPhotoFileIds.length + localPhotoPaths.length < MAX_DIARY_PHOTOS}}" class="add-photo" bind:tap="choosePhotos">＋</view>
+        </view>
+      </view>
+
+      <view class="save-row">
+        <button class="clear-draft-btn {{saving ? 'btn-disabled' : ''}}" disabled="{{saving}}" bind:tap="clearDraftContent">清空草稿</button>
+        <button class="save-btn {{saving ? 'btn-disabled' : ''}}" disabled="{{saving}}" bind:tap="onSaveTap">保存日记</button>
+      </view>
     </view>
   </block>
 </scroll-view>
 
 <view wx:if="{{tagPanelVisible}}" class="tag-mask">
   <view class="tag-panel">
-    <view class="tag-title">确认自动识别的标签</view>
-    <view wx:if="{{recognizedTags.length === 0}}" class="tag-empty">没有识别到标签，可以直接保存。</view>
-    <view wx:for="{{recognizedTags}}" wx:key="editKey" wx:for-index="index" class="tag-edit-row">
-      <view wx:if="{{item.source !== 'candidate'}}" class="tag-fixed-meta">
-        <view class="tag-category">{{item.categoryName}}</view>
-        <view class="tag-group">{{item.groupName}}</view>
+    <view class="tag-header">
+      <view class="tag-title">确认日记标签</view>
+      <view class="tag-header-actions">
+        <view class="retag-btn {{saving ? 'btn-disabled' : ''}}" bind:tap="rerunTagRecognition">重新识别</view>
+        <view class="add-tag-btn {{saving ? 'btn-disabled' : ''}}" bind:tap="addManualTag">＋ 手动添加标签</view>
       </view>
-      <view wx:else class="tag-candidate-meta">
-        <picker mode="selector" range="{{tagCategoryNames}}" value="{{item.categoryIndex}}" bindchange="onTagCategoryChange" data-index="{{index}}">
-          <view class="tag-picker">{{item.categoryName}}</view>
-        </picker>
-        <picker mode="selector" range="{{item.groupNames}}" value="{{item.groupIndex}}" bindchange="onTagGroupChange" data-index="{{index}}">
-          <view class="tag-picker {{item.missingGroup ? 'is-missing' : ''}}">{{item.groupName || '选子分类'}}</view>
-        </picker>
-      </view>
-      <input class="tag-name-input" value="{{item.name}}" disabled="{{!item.editable}}" bindinput="onTagNameInput" data-index="{{index}}" />
-      <view class="tag-remove" bind:tap="removeTag" data-index="{{index}}">删除</view>
     </view>
-    <view wx:if="{{tagSaveDisabled}}" class="tag-warning">新标签需要先选择子分类。</view>
-    <view wx:if="{{tagSyncError}}" class="tag-warning">{{tagSyncError}}</view>
+    <view class="tag-panel-body">
+      <view class="tag-search">
+        <view class="tag-search-bar">
+          <text class="tag-search-icon">🔍</text>
+          <input
+            class="tag-search-input"
+            value="{{tagSearchQuery}}"
+            placeholder="搜索已有标签"
+            bindinput="onTagSearchInput"
+            confirm-type="search"
+          />
+        </view>
+        <scroll-view wx:if="{{tagSearchResults.length > 0}}" class="tag-search-results" scroll-y type="list" enhanced show-scrollbar="{{false}}" style="height: {{tagSearchResultsHeight}}rpx">
+          <view
+            wx:for="{{tagSearchResults}}"
+            wx:key="option.id"
+            wx:for-index="index"
+            class="tag-search-result"
+            bind:tap="addExistingTagFromSearch"
+            data-index="{{index}}"
+          >
+            <text class="tag-search-name">{{item.option.name}}</text>
+            <text class="tag-search-meta">{{item.categoryName}} · {{item.groupName}}</text>
+          </view>
+        </scroll-view>
+      </view>
+      <view wx:if="{{recognizedTags.length === 0}}" class="tag-empty">没有识别到标签，可以直接保存。</view>
+      <view wx:for="{{recognizedTags}}" wx:key="editKey" wx:for-index="index" class="tag-edit-row">
+        <picker class="tag-category-picker" mode="selector" range="{{tagCategoryNames}}" value="{{item.categoryIndex}}" bindchange="onTagCategoryChange" data-index="{{index}}">
+          <view class="tag-picker tag-picker-primary">{{item.categoryName}}</view>
+        </picker>
+        <picker class="tag-group-picker" mode="selector" range="{{item.groupNames}}" value="{{item.groupIndex}}" bindchange="onTagGroupChange" data-index="{{index}}">
+          <view class="tag-picker tag-picker-secondary {{item.missingGroup ? 'is-missing' : ''}}">{{item.groupName || '选子分类'}}</view>
+        </picker>
+        <input class="tag-name-input" value="{{item.name}}" placeholder="输入标签名称" bindinput="onTagNameInput" data-index="{{index}}" />
+        <view class="tag-remove" bind:tap="removeTag" data-index="{{index}}">删除</view>
+      </view>
+      <view wx:if="{{tagSaveDisabled}}" class="tag-warning">新标签需要先选择子分类。</view>
+      <view wx:if="{{tagSyncError}}" class="tag-warning">{{tagSyncError}}</view>
+    </view>
     <view class="tag-actions">
       <button class="cancel-btn" bind:tap="closeTagPanel">再改改</button>
       <button class="confirm-btn {{saving || tagSaveDisabled ? 'btn-disabled' : ''}}" disabled="{{saving || tagSaveDisabled}}" bind:tap="confirmSave">确认保存</button>

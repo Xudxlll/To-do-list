@@ -1,5 +1,5 @@
 import { Category, Option } from '../data/categories';
-import { RecognizedTag } from '../types/diary';
+import { DiaryTag, RecognizedTag } from '../types/diary';
 import { SharedOptionInput } from '../types/options';
 import { buildDiaryCandidateOptionId } from './diaryTagIds';
 import { findOptionByName, normalizeOptionName } from './optionCatalog';
@@ -19,6 +19,10 @@ export interface EditableTagGroup {
 }
 
 type MatchedOption = NonNullable<ReturnType<typeof findOptionByName>>;
+
+export interface DiaryTagOptionSearchResult extends MatchedOption {
+  score: number;
+}
 
 export class DiaryCandidateTagSyncError extends Error {
   syncedTags: EditableRecognizedTag[];
@@ -58,6 +62,28 @@ function optionSource(option: Option): 'preset' | 'custom' {
   return option.isCustom ? 'custom' : 'preset';
 }
 
+function findOptionById(
+  categories: Category[],
+  categoryId: string,
+  optionId: string
+): MatchedOption | undefined {
+  const category = findCategory(categories, categoryId);
+  if (!category) return undefined;
+  for (const group of category.optionGroups) {
+    const option = group.options.find(item => item.id === optionId);
+    if (option) {
+      return {
+        categoryId: category.id,
+        categoryName: category.name,
+        groupId: group.id,
+        groupName: group.title,
+        option,
+      };
+    }
+  }
+  return undefined;
+}
+
 function optionToEditableTag(base: EditableRecognizedTag, matched: MatchedOption): EditableRecognizedTag {
   return {
     ...base,
@@ -69,8 +95,93 @@ function optionToEditableTag(base: EditableRecognizedTag, matched: MatchedOption
     name: matched.option.name,
     isCustom: matched.option.isCustom,
     source: optionSource(matched.option),
-    editable: false,
+    editable: true,
   };
+}
+
+function optionToNewEditableTag(matched: MatchedOption, index: number): EditableRecognizedTag {
+  return {
+    categoryId: matched.categoryId,
+    categoryName: matched.categoryName,
+    groupId: matched.groupId,
+    groupName: matched.groupName,
+    optionId: matched.option.id,
+    name: matched.option.name,
+    isCustom: matched.option.isCustom,
+    source: optionSource(matched.option),
+    editable: true,
+    editKey: `existing:${matched.categoryId}:${matched.option.id}:${index}`,
+  };
+}
+
+function normalizeSearchText(value: string): string {
+  return normalizeOptionName(value).replace(/[\s,，、。.!！?？;；:：/\\|｜\-—_]+/g, '');
+}
+
+function scoreOptionMatch(query: string, optionName: string): number {
+  const normalizedQuery = normalizeSearchText(query);
+  const normalizedName = normalizeSearchText(optionName);
+  if (!normalizedQuery || !normalizedName) return 0;
+  if (normalizedName === normalizedQuery) return 100;
+  if (normalizedName.indexOf(normalizedQuery) >= 0) {
+    return 80 - Math.max(0, normalizedName.length - normalizedQuery.length);
+  }
+  if (normalizedQuery.indexOf(normalizedName) >= 0) {
+    return 70 - Math.max(0, normalizedQuery.length - normalizedName.length);
+  }
+  let overlap = 0;
+  Array.from(new Set(normalizedQuery.split(''))).forEach(char => {
+    if (normalizedName.indexOf(char) >= 0) overlap += 1;
+  });
+  return overlap >= Math.min(2, normalizedQuery.length)
+    ? Math.floor((overlap / Math.max(normalizedQuery.length, normalizedName.length)) * 60)
+    : 0;
+}
+
+function hasTagOption(tags: EditableRecognizedTag[], categoryId: string, optionId: string): boolean {
+  return tags.some(tag => tag.categoryId === categoryId && tag.optionId === optionId);
+}
+
+export function searchDiaryTagOptions(
+  query: string,
+  categories: Category[],
+  tags: EditableRecognizedTag[] = []
+): DiaryTagOptionSearchResult[] {
+  const keyword = query.trim();
+  if (!keyword) return [];
+  const results: DiaryTagOptionSearchResult[] = [];
+  categories.forEach(category => {
+    category.optionGroups.forEach(group => {
+      group.options.forEach(option => {
+        if (hasTagOption(tags, category.id, option.id)) return;
+        const score = scoreOptionMatch(keyword, option.name);
+        if (score <= 0) return;
+        results.push({
+          categoryId: category.id,
+          categoryName: category.name,
+          groupId: group.id,
+          groupName: group.title,
+          option,
+          score,
+        });
+      });
+    });
+  });
+  return results
+    .sort((left, right) => (
+      right.score - left.score
+      || normalizeSearchText(left.option.name).length - normalizeSearchText(right.option.name).length
+      || left.option.name.localeCompare(right.option.name)
+    ))
+    .slice(0, 8);
+}
+
+export function appendExistingDiaryTag(
+  tags: EditableRecognizedTag[],
+  matched: MatchedOption
+): EditableRecognizedTag[] {
+  if (hasTagOption(tags, matched.categoryId, matched.option.id)) return tags.slice();
+  return tags.concat(optionToNewEditableTag(matched, tags.length));
 }
 
 function buildCandidateTag(
@@ -101,8 +212,52 @@ function buildCandidateTag(
 export function prepareEditableDiaryTags(tags: RecognizedTag[]): EditableRecognizedTag[] {
   return tags.map((tag, index) => ({
     ...tag,
+    editable: true,
     editKey: `${tag.categoryId}:${tag.optionId}:${index}`,
   }));
+}
+
+export function prepareSavedDiaryTags(tags: DiaryTag[], categories: Category[]): EditableRecognizedTag[] {
+  return tags.map((tag, index) => {
+    const category = findCategory(categories, tag.categoryId);
+    const matched = findOptionById(categories, tag.categoryId, tag.optionId)
+      || findOptionByName(categories, tag.name, tag.categoryId);
+    const fallbackGroup = category?.optionGroups[0];
+    return {
+      categoryId: tag.categoryId,
+      categoryName: matched?.categoryName || category?.name || '',
+      optionId: tag.optionId,
+      name: tag.name,
+      isCustom: tag.isCustom,
+      source: matched ? optionSource(matched.option) : (tag.isCustom ? 'custom' : 'preset'),
+      groupId: matched?.groupId || fallbackGroup?.id || '',
+      groupName: matched?.groupName || fallbackGroup?.title || '',
+      editable: true,
+      editKey: `${tag.categoryId}:${tag.optionId}:${index}`,
+    };
+  });
+}
+
+export function appendManualDiaryTag(
+  tags: EditableRecognizedTag[],
+  categories: Category[]
+): EditableRecognizedTag[] {
+  const category = categories.find(item => item.optionGroups.length > 0);
+  const group = category?.optionGroups[0];
+  if (!category || !group) return tags.slice();
+
+  return tags.concat({
+    categoryId: category.id,
+    categoryName: category.name,
+    optionId: buildDiaryCandidateOptionId(category.id, ''),
+    name: '',
+    isCustom: true,
+    source: 'candidate',
+    groupId: group.id,
+    groupName: group.title,
+    editable: true,
+    editKey: `manual:${category.id}:${group.id}:${tags.length}`,
+  });
 }
 
 export function updateEditableDiaryTagName(
@@ -269,7 +424,7 @@ export async function syncDiaryCandidateTags(
       name: option.name,
       isCustom: option.isCustom,
       source: optionSource(option),
-      editable: false,
+      editable: true,
     });
   }
 

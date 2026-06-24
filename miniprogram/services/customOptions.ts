@@ -11,6 +11,7 @@ import { createStableOptionId, normalizeOptionName, validateOptionInput } from '
 
 const OPTION_CATALOG_CACHE_KEY = 'categoryOptionCatalog:v2';
 const PAGE_SIZE = 20;
+const OTHER_GROUP_ID = 'other';
 
 type SharedOptionIdParts = {
   now?: number;
@@ -65,7 +66,9 @@ function getPresetCategory(categoryId: string): Category | undefined {
 }
 
 function isFixedGroup(categoryId: string, groupId: string): boolean {
-  return Boolean(getPresetCategory(categoryId)?.optionGroups.some(group => group.id === groupId));
+  const presetCategory = getPresetCategory(categoryId);
+  if (!presetCategory) return false;
+  return groupId === OTHER_GROUP_ID || presetCategory.optionGroups.some(group => group.id === groupId);
 }
 
 function cloneSerializableRecords(records: OptionCatalogRecord[]): OptionCatalogRecord[] {
@@ -372,6 +375,39 @@ function isDuplicateRecord(record: LegacyCustomOptionRecord | ManagedOptionRecor
   return legacyOptionId !== excludeOptionId;
 }
 
+function getDuplicateRecordOptionId(record: LegacyCustomOptionRecord | ManagedOptionRecord): string {
+  if ('recordType' in record) return record.optionId;
+  return buildLegacyOptionId(record.categoryId, record.normalizedName);
+}
+
+function getDuplicateRecordTime(record: LegacyCustomOptionRecord | ManagedOptionRecord): number {
+  if ('recordType' in record) {
+    return Number.isFinite(record.updatedAt) ? record.updatedAt : record.createdAt;
+  }
+  return record.createdAt;
+}
+
+function compareDuplicateRecords(
+  left: LegacyCustomOptionRecord | ManagedOptionRecord,
+  right: LegacyCustomOptionRecord | ManagedOptionRecord
+): number {
+  const timeDiff = getDuplicateRecordTime(left) - getDuplicateRecordTime(right);
+  if (timeDiff !== 0) return timeDiff;
+  return trimText(left._id).localeCompare(trimText(right._id));
+}
+
+function getLatestDuplicateRecords(records: Array<LegacyCustomOptionRecord | ManagedOptionRecord>): Array<LegacyCustomOptionRecord | ManagedOptionRecord> {
+  const latest = new Map<string, LegacyCustomOptionRecord | ManagedOptionRecord>();
+  records.forEach(record => {
+    const optionId = getDuplicateRecordOptionId(record);
+    const current = latest.get(optionId);
+    if (!current || compareDuplicateRecords(record, current) >= 0) {
+      latest.set(optionId, record);
+    }
+  });
+  return Array.from(latest.values());
+}
+
 async function assertNoLatestDuplicate(
   db: DB.Database,
   input: SharedOptionInput,
@@ -379,13 +415,23 @@ async function assertNoLatestDuplicate(
 ): Promise<void> {
   const categoryId = trimText(input.categoryId);
   const normalizedName = normalizeOptionName(input.name);
-  const res = await db.collection(CLOUD_COLLECTIONS.customOptions)
-    .where({ categoryId, normalizedName })
-    .limit(PAGE_SIZE)
-    .get();
-  const duplicate = (Array.isArray(res.data) ? res.data : [])
-    .map(raw => normalizeManagedRecord(raw) || normalizeLegacyRecord(raw))
-    .filter((record): record is LegacyCustomOptionRecord | ManagedOptionRecord => Boolean(record))
+  const records: Array<LegacyCustomOptionRecord | ManagedOptionRecord> = [];
+  let skip = 0;
+  while (true) {
+    const res = await db.collection(CLOUD_COLLECTIONS.customOptions)
+      .where({ categoryId, normalizedName })
+      .skip(skip)
+      .limit(PAGE_SIZE)
+      .get();
+    const page = Array.isArray(res.data) ? res.data : [];
+    records.push(...page
+      .map(raw => normalizeManagedRecord(raw) || normalizeLegacyRecord(raw))
+      .filter((record): record is LegacyCustomOptionRecord | ManagedOptionRecord => Boolean(record)));
+    if (page.length < PAGE_SIZE) break;
+    skip += PAGE_SIZE;
+  }
+
+  const duplicate = getLatestDuplicateRecords(records)
     .some(record => isDuplicateRecord(record, excludeOptionId));
   if (duplicate) {
     throw createServiceError('duplicate', '共享标签保存失败：duplicate');
@@ -535,7 +581,7 @@ export async function saveSharedGroupOrders(
     throw createServiceError('category', '共享标签顺序保存失败：分类无效');
   }
 
-  const fixedGroupIds = new Set(presetCategory.optionGroups.map(group => group.id));
+  const fixedGroupIds = new Set([...presetCategory.optionGroups.map(group => group.id), OTHER_GROUP_ID]);
   const normalizedGroups = groups.map(group => {
     const groupId = trimText(group.groupId);
     if (!fixedGroupIds.has(groupId)) {

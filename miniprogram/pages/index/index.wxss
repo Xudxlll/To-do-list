@@ -405,6 +405,111 @@
   line-height: 1.35;
 }
 
+.selected-panel-overlay {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 24rpx;
+  background: rgba(0, 0, 0, 0.26);
+  z-index: 98;
+}
+
+.selected-panel {
+  width: 100%;
+  height: 78vh;
+  max-height: 78vh;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  border-radius: 24rpx 24rpx 0 0;
+  padding: 26rpx 24rpx 30rpx;
+  box-sizing: border-box;
+}
+
+.selected-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18rpx;
+  margin-bottom: 18rpx;
+}
+
+.selected-panel-title {
+  font-size: 32rpx;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.selected-panel-close {
+  width: 56rpx;
+  height: 56rpx;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  font-size: 26rpx;
+}
+
+.selected-empty {
+  padding: 42rpx 0 18rpx;
+  text-align: center;
+  font-size: 24rpx;
+  color: var(--text-secondary);
+}
+
+.selected-list {
+  height: 58vh;
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.selected-chip {
+  width: 100%;
+  min-height: 76rpx;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18rpx;
+  padding: 18rpx 20rpx;
+  border: 2rpx solid var(--accent-light);
+  border-radius: var(--radius-sm);
+  background: var(--accent-bg);
+  color: var(--accent);
+  box-sizing: border-box;
+}
+
+.selected-chip-name {
+  flex: 1;
+  min-width: 0;
+  white-space: normal;
+  word-break: break-all;
+  font-size: 30rpx;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.selected-chip-remove {
+  width: 44rpx;
+  height: 44rpx;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 30rpx;
+  line-height: 44rpx;
+}
+
 .editor-overlay {
   position: fixed;
   top: 0;

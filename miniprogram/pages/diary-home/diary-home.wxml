@@ -21,7 +21,7 @@
 
   <view wx:else class="timeline">
     <view wx:for="{{timeline}}" wx:key="date" class="diary-card" bind:tap="openDiary" data-date="{{item.date}}">
-      <image wx:if="{{item.coverFileId}}" class="cover" src="{{item.coverFileId}}" mode="aspectFill" />
+      <image wx:if="{{item.coverUrl}}" class="cover" src="{{item.coverUrl}}" mode="aspectFill" />
       <view class="diary-body">
         <view class="date-row">
           <text class="date">{{item.date}}</text>

@@ -22,6 +22,13 @@ import { moveOptionAcrossGroups, readOptionOrder } from '../../utils/optionOrder
 
 type GroupViewModel = OptionGroup & { collapsed: boolean };
 type EditorMode = 'create' | 'edit';
+type SelectedGroupViewModel = Selection;
+type SelectedItemViewModel = {
+  categoryId: string;
+  categoryName: string;
+  optionId: string;
+  optionName: string;
+};
 type DragTarget = {
   groupId: string;
   index: number;
@@ -99,6 +106,17 @@ function selectionListToRecord(selections: Selection[]): Record<string, Option[]
       }));
     return record;
   }, {} as Record<string, Option[]>);
+}
+
+function flattenSelectedItems(selections: Selection[]): SelectedItemViewModel[] {
+  return selections.flatMap(selection => (
+    selection.options.map(option => ({
+      categoryId: selection.categoryId,
+      categoryName: selection.categoryName,
+      optionId: option.id,
+      optionName: option.name,
+    }))
+  ));
 }
 
 function summarizeSelections(selectionsRecord: Record<string, Option[]>) {
@@ -310,6 +328,9 @@ Component({
     currentOptionGroups: buildCurrentGroups(INITIAL_CATEGORIES[0], {}),
     selectedIds: {} as Record<string, boolean>,
     selectedCounts: {} as Record<string, number>,
+    selectedGroups: [] as SelectedGroupViewModel[],
+    selectedItems: [] as SelectedItemViewModel[],
+    selectedPanelVisible: false,
     totalCount: 0,
     manageMode: false,
     collapsedGroups: {} as CollapsedGroupMap,
@@ -458,6 +479,8 @@ Component({
       const searchQuery = typeof options.searchQuery === 'string' ? options.searchQuery : this.data.searchQuery;
       const searchResults = searchQuery.trim() ? searchCatalog(categories, searchQuery) : [];
       const { selectedIds, selectedCounts, totalCount } = summarizeSelections(nextSelections);
+      const selectedGroups = recordToSelectionList(categories, nextSelections);
+      const selectedItems = flattenSelectedItems(selectedGroups);
 
       this.setData({
         catalogRecords: records,
@@ -467,6 +490,8 @@ Component({
         currentOptionGroups,
         selectedIds,
         selectedCounts,
+        selectedGroups,
+        selectedItems,
         totalCount,
         collapsedGroups,
         allGroupsCollapsed: currentOptionGroups.length > 0 && currentOptionGroups.every(group => group.collapsed),
@@ -734,6 +759,48 @@ Component({
       app.saveSelections();
       this.renderCatalog(this.data.catalogRecords, {
         categoryId,
+        collapsedGroups: this.data.collapsedGroups,
+        searchQuery: this.data.searchQuery,
+      });
+    },
+
+    openSelectedPanel() {
+      if (this.isDragBusy()) return;
+      const selectedGroups = this.data.selectedGroups.length > 0
+        ? this.data.selectedGroups
+        : recordToSelectionList(this.data.categories, app.globalData.selections || {});
+      const selectedItems = this.data.selectedItems.length > 0
+        ? this.data.selectedItems
+        : flattenSelectedItems(selectedGroups);
+      this.setData({
+        selectedPanelVisible: true,
+        selectedGroups,
+        selectedItems,
+      });
+    },
+
+    closeSelectedPanel() {
+      this.setData({ selectedPanelVisible: false });
+    },
+
+    onRemoveSelectedOption(e: WechatMiniprogram.TouchEvent) {
+      if (this.isDragBusy()) return;
+      const categoryId = e.currentTarget.dataset.categoryId as string;
+      const optionId = e.currentTarget.dataset.optionId as string;
+      if (!categoryId || !optionId) return;
+
+      const selections = { ...(app.globalData.selections || {}) };
+      const nextOptions = cloneOptions(selections[categoryId] || []).filter(option => option.id !== optionId);
+      if (nextOptions.length > 0) {
+        selections[categoryId] = nextOptions;
+      } else {
+        delete selections[categoryId];
+      }
+
+      app.globalData.selections = selections;
+      app.saveSelections();
+      this.renderCatalog(this.data.catalogRecords, {
+        categoryId: this.data.currentCategoryId,
         collapsedGroups: this.data.collapsedGroups,
         searchQuery: this.data.searchQuery,
       });

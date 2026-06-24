@@ -256,11 +256,6 @@ export function searchCatalog(categories: Category[], query: string): OptionSear
   return results.map(({ score, categoryIndex, groupIndex, optionIndex, ...result }) => result);
 }
 
-function getFixedGroupIds(categoryId: string): Set<string> {
-  const presetCategory = CATEGORIES.find(category => category.id === categoryId);
-  return new Set((presetCategory?.optionGroups || []).map(group => group.id));
-}
-
 export function validateOptionInput(
   categories: Category[],
   input: OptionValidationInput,
@@ -278,7 +273,7 @@ export function validateOptionInput(
   const category = findCategory(categories, categoryId);
   if (!category) return { ok: false, code: 'category' };
 
-  if (!getFixedGroupIds(categoryId).has(groupId)) return { ok: false, code: 'group' };
+  if (!category.optionGroups.some(group => group.id === groupId)) return { ok: false, code: 'group' };
 
   const normalizedName = normalizeOptionName(name);
   const duplicate = category.options.some(option => (
@@ -357,9 +352,11 @@ function applyManagedRecords(categories: Category[], records: ManagedOptionRecor
       const category = findCategory(categories, record.categoryId);
       const presetCategory = CATEGORIES.find(item => item.id === record.categoryId);
       const isFixedGroup = presetCategory?.optionGroups.some(item => item.id === record.groupId);
-      const group = isFixedGroup && category
-        ? category.optionGroups.find(item => item.id === record.groupId)
-        : undefined;
+      const group = category && record.groupId === OTHER_GROUP_ID
+        ? getOrCreateOtherGroup(category)
+        : isFixedGroup && category
+          ? category.optionGroups.find(item => item.id === record.groupId)
+          : undefined;
       if (!category || !group) return;
 
       const existing = removeOption(categories, record.optionId);

@@ -6,6 +6,7 @@ import {
   ShareData,
   validateShareData,
 } from '../../data/categories';
+import { getLockedPlan } from '../../services/lockedPlans';
 
 interface PartnerCategoryItem {
   categoryId: string;
@@ -23,6 +24,7 @@ const app = getApp<{
   saveSelections(): void;
   saveLockedState(data: ShareData): Promise<void>;
   clearLockedState(): Promise<void>;
+  getDateString(): string;
 }>();
 
 Component({
@@ -38,7 +40,7 @@ Component({
   },
 
   lifetimes: {
-    attached() {
+    async attached() {
       const pages = getCurrentPages();
       const page = pages[pages.length - 1];
       const opts = (page as any).options || {};
@@ -47,20 +49,13 @@ Component({
       if (mode === 'locked') {
         this.showLocked();
       } else {
-        this.showPartnerView();
+        await this.showPartnerView();
       }
     },
   },
 
   methods: {
-    showLocked() {
-      const locked = wx.getStorageSync('lockedState');
-      if (!locked || !validateShareData(locked.shareData)) {
-        wx.removeStorageSync('lockedState');
-        wx.reLaunch({ url: '/pages/welcome/welcome' });
-        return;
-      }
-      const sd = locked.shareData as ShareData;
+    showLockedShareData(sd: ShareData) {
       this.setData({
         isLocked: true,
         isFreeText: sd.mode === 'freeText',
@@ -73,7 +68,29 @@ Component({
       });
     },
 
-    showPartnerView() {
+    showLocked() {
+      const locked = wx.getStorageSync('lockedState');
+      if (!locked || !validateShareData(locked.shareData)) {
+        wx.removeStorageSync('lockedState');
+        wx.reLaunch({ url: '/pages/welcome/welcome' });
+        return;
+      }
+      const sd = locked.shareData as ShareData;
+      this.showLockedShareData(sd);
+    },
+
+    async showPartnerView() {
+      const lockedPlan = await getLockedPlan(app.getDateString());
+      if (lockedPlan) {
+        wx.setStorageSync('lockedState', {
+          locked: true,
+          date: lockedPlan.date,
+          shareData: lockedPlan.shareData,
+        });
+        this.showLockedShareData(lockedPlan.shareData);
+        return;
+      }
+
       const g = app.globalData;
       const shareData = g.partnerShareData;
       if (!shareData) {

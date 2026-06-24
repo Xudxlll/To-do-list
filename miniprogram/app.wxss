@@ -36,6 +36,15 @@ page {
   color: var(--text-secondary);
 }
 
+.bottom-bar .count-tappable {
+  min-height: 64rpx;
+  display: flex;
+  align-items: center;
+  padding: 0 16rpx;
+  margin-left: -16rpx;
+  border-radius: var(--radius-sm);
+}
+
 .bottom-bar .count em {
   font-style: normal;
   color: var(--accent);

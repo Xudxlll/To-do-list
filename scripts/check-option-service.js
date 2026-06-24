@@ -446,16 +446,18 @@ async function main() {
     makeManagedRecord(1),
     makeManagedRecord(2, { source: 'other' }),
     makeManagedRecord(3, { deleted: true }),
+    makeManagedRecord(4, { groupId: 'other' }),
     makeGroupOrderRecord(1),
     makeGroupOrderRecord(2, { groupId: 'other' }),
     makeGroupOrderRecord(3, { optionIds: 'not-an-array' }),
   ];
   const noisyDb = new FakeDb({ [COLLECTION_NAME]: noisyRecords });
   const normalized = await service.listOptionCatalogRecords(noisyDb);
-  assert.equal(normalized.length, 4, '无效 legacy/managed/order 记录应该被过滤掉');
+  assert.equal(normalized.length, 6, '无效 legacy/managed/order 记录应该被过滤掉，other 分组记录应保留');
   assert.equal(normalized.some(record => record._id === 'legacy_2'), false, '空名 legacy 记录不应保留');
   assert.equal(normalized.some(record => record._id === 'managed_2'), false, '非法 source managed 记录不应保留');
-  assert.equal(normalized.some(record => record._id === 'order_2'), false, '非固定组 order 记录不应保留');
+  assert.equal(normalized.some(record => record._id === 'managed_4'), true, 'other 分组 option 记录应保留');
+  assert.equal(normalized.some(record => record._id === 'order_2'), true, 'other 分组 order 记录应保留');
 
   resetStorage();
   const raceSeedRecords = Array.from({ length: 21 }, (_, index) => makeLegacyRecord(index + 1));
@@ -759,6 +761,55 @@ async function main() {
   );
   assert.equal(getCollection(staleCreateDb).docSetCalls.length, 0, '云端重名新增失败时不应写入 managed 文档');
 
+  const tombstonedNameDb = new FakeDb({
+    [COLLECTION_NAME]: [
+      makeManagedRecord(53, {
+        _id: buildManagedDocId('option_deleted_chicken'),
+        optionId: 'option_deleted_chicken',
+        categoryId: 'eat',
+        groupId: 'other',
+        source: 'custom',
+        name: '鸡煲',
+        normalizedName: '鸡煲',
+        deleted: false,
+        createdAt: 1000,
+        updatedAt: 1000,
+      }),
+      makeManagedRecord(54, {
+        _id: buildManagedDocId('option_deleted_chicken'),
+        optionId: 'option_deleted_chicken',
+        categoryId: 'eat',
+        groupId: 'other',
+        source: 'custom',
+        name: '鸡煲',
+        normalizedName: '鸡煲',
+        deleted: true,
+        createdAt: 1000,
+        updatedAt: 2000,
+      }),
+      makeManagedRecord(55, {
+        _id: buildManagedDocId('option_other_live'),
+        optionId: 'option_other_live',
+        categoryId: 'eat',
+        groupId: 'other',
+        source: 'custom',
+        name: '砂锅',
+        normalizedName: '砂锅',
+        deleted: false,
+        createdAt: 1000,
+        updatedAt: 1000,
+      }),
+    ],
+  });
+  const recreatedChicken = await service.createSharedOption(
+    { categoryId: 'eat', groupId: 'other', name: '鸡煲', description: '' },
+    buildCatalog(getCollection(tombstonedNameDb).records),
+    tombstonedNameDb,
+    { now: 300, randomPart: 'readd' }
+  );
+  assert.equal(recreatedChicken.name, '鸡煲', '已被 tombstone 删除的同名活动应允许重新新增');
+  assert.equal(getCollection(tombstonedNameDb).docSetCalls.length, 1, '重新新增已删除同名活动时应写入新 managed 文档');
+
   const staleUpdateDb = new FakeDb({
     [COLLECTION_NAME]: [
       makeManagedRecord(51, {
@@ -930,15 +981,10 @@ async function main() {
   assert.equal(service.readOptionCatalogCache().some(record => record.recordType === 'group_order' && record.groupId === 'grill'), true, '云函数排序成功后应刷新本地缓存');
   setCloudDb(null);
 
-  let fixedOrderFailed = false;
-  try {
-    await service.saveSharedGroupOrders('eat', [
-      { groupId: 'other', optionIds: ['x'] },
-    ], orderDb);
-  } catch (error) {
-    fixedOrderFailed = true;
-  }
-  assert.equal(fixedOrderFailed, true, '不允许保存非固定组顺序');
+  const otherOrderRecords = await service.saveSharedGroupOrders('eat', [
+    { groupId: 'other', optionIds: ['x'] },
+  ], orderDb);
+  assert.equal(otherOrderRecords[0].groupId, 'other', 'other 分组顺序也应允许保存');
 
   console.log('option service checks passed');
 }
